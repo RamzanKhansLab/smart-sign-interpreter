@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import time
+
+import requests
+
+DEFAULT_PACKET = {
+    "thumb": 840,
+    "index": 210,
+    "middle": 205,
+    "ring": 220,
+    "little": 230,
+}
+
+
+def generate_random_packet() -> dict:
+    return {key: random.randint(0, 1023) for key in DEFAULT_PACKET.keys()}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Simulate glove sensor sender.")
+    parser.add_argument(
+        "--url",
+        default="http://localhost:5000/gesture",
+        help="Backend URL",
+    )
+    parser.add_argument("--count", type=int, default=10, help="Number of packets")
+    parser.add_argument("--interval", type=float, default=0.5, help="Seconds between")
+    parser.add_argument("--random", action="store_true", help="Send random packets")
+    parser.add_argument(
+        "--packet-file",
+        help="JSON file containing a packet to send",
+    )
+
+    args = parser.parse_args()
+
+    packet = DEFAULT_PACKET
+    if args.packet_file:
+        with open(args.packet_file, "r", encoding="utf-8") as handle:
+            packet = json.load(handle)
+
+    for i in range(args.count):
+        payload = generate_random_packet() if args.random else packet
+        response = requests.post(args.url, json=payload, timeout=5)
+        print(f"{i + 1}: {response.status_code} {response.text}")
+        time.sleep(args.interval)
+
+
+if __name__ == "__main__":
+    main()
