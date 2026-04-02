@@ -1,8 +1,9 @@
-const state = {
+﻿const state = {
   capturing: false,
   timer: null,
   buffer: [],
   lastMessage: null,
+  labels: [],
 };
 
 function setText(id, value) {
@@ -103,6 +104,40 @@ async function refreshStats() {
   const res = await fetch("/api/dataset/stats");
   const data = await res.json();
   setText("dataset-stats", JSON.stringify(data, null, 2));
+  updateLabelSelect(data.by_label || {});
+  return data;
+}
+
+function updateLabelSelect(byLabel) {
+  const select = document.getElementById("edit-label");
+  if (!select) return;
+
+  const labels = Object.keys(byLabel);
+  labels.sort((a, b) => a.localeCompare(b));
+  state.labels = labels;
+
+  const previous = select.value;
+  select.innerHTML = "";
+
+  const allOpt = document.createElement("option");
+  allOpt.value = "__all__";
+  allOpt.textContent = "(all labels)";
+  select.appendChild(allOpt);
+
+  for (const label of labels) {
+    const opt = document.createElement("option");
+    opt.value = label;
+    const count = byLabel[label];
+    const display = label === "" ? "(empty label)" : label;
+    opt.textContent = `${display} (${count})`;
+    select.appendChild(opt);
+  }
+
+  if (previous && [...select.options].some((o) => o.value === previous)) {
+    select.value = previous;
+  } else {
+    select.value = "__all__";
+  }
 }
 
 async function refreshModelStatus() {
@@ -111,10 +146,24 @@ async function refreshModelStatus() {
   setText("model-loaded", data.model_loaded ? "YES" : "NO");
 }
 
+async function readErrorMessage(res) {
+  try {
+    const data = await res.json();
+    if (data && data.detail) return data.detail;
+    return JSON.stringify(data);
+  } catch (e) {
+    try {
+      return await res.text();
+    } catch (e2) {
+      return "Request failed";
+    }
+  }
+}
+
 async function saveBuffer() {
   const label = getLabel();
   if (!label) {
-    alert("Enter a gesture label");
+    alert("Enter a gesture label (placeholder does not count)");
     return;
   }
   if (state.buffer.length === 0) {
@@ -129,15 +178,15 @@ async function saveBuffer() {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    alert(err.detail || "Save failed");
+    const msg = await readErrorMessage(res);
+    alert(msg || "Save failed");
     return;
   }
 
   const out = await res.json();
   alert(`Saved ${out.saved} samples for label '${label}'`);
   clearBuffer();
-  refreshStats();
+  await refreshStats();
 }
 
 async function resetModel() {
@@ -170,6 +219,112 @@ async function retrainModel() {
   );
 }
 
+function selectedEditLabel() {
+  const sel = document.getElementById("edit-label");
+  if (!sel) return null;
+  const value = sel.value;
+  if (value === "__all__") return null;
+  return value;
+}
+
+async function loadRows() {
+  const label = selectedEditLabel();
+  const url = new URL("/api/dataset/rows", window.location.origin);
+  url.searchParams.set("limit", "50");
+  url.searchParams.set("offset", "0");
+  if (label !== null) url.searchParams.set("label", label);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    alert(msg || "Failed to load rows");
+    return;
+  }
+  const data = await res.json();
+  setText("dataset-rows", JSON.stringify(data, null, 2));
+}
+
+async function renameSelectedLabel() {
+  const fromLabel = selectedEditLabel();
+  const toLabel = document.getElementById("rename-to").value.trim();
+
+  if (fromLabel === null) {
+    alert("Select a specific label to rename");
+    return;
+  }
+  if (!toLabel) {
+    alert("Enter the new label name");
+    return;
+  }
+
+  const res = await fetch("/api/dataset/rename-label", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from_label: fromLabel, to_label: toLabel }),
+  });
+
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    alert(msg || "Rename failed");
+    return;
+  }
+
+  const out = await res.json();
+  alert(`Renamed: updated ${out.updated} rows`);
+  document.getElementById("rename-to").value = "";
+  await refreshStats();
+}
+
+async function deleteSelectedLabel() {
+  const label = selectedEditLabel();
+  if (label === null) {
+    alert("Select a specific label to delete");
+    return;
+  }
+  if (!confirm(`Delete ALL rows with label '${label}'?`)) return;
+
+  const res = await fetch("/api/dataset/delete-label", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  });
+
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    alert(msg || "Delete failed");
+    return;
+  }
+
+  const out = await res.json();
+  alert(`Deleted ${out.deleted} rows`);
+  await refreshStats();
+}
+
+async function deleteEmptyLabels() {
+  const res = await fetch("/api/dataset/delete-empty-labels", { method: "POST" });
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    alert(msg || "Delete empty labels failed");
+    return;
+  }
+  const out = await res.json();
+  alert(`Deleted ${out.deleted} rows with empty label`);
+  await refreshStats();
+}
+
+async function clearDataset() {
+  if (!confirm("Clear the entire dataset CSV?")) return;
+  const res = await fetch("/api/dataset/clear", { method: "POST" });
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    alert(msg || "Clear failed");
+    return;
+  }
+  alert("Dataset cleared");
+  setText("dataset-rows", "Click LOAD ROWS");
+  await refreshStats();
+}
+
 function bindUi() {
   document.getElementById("start").addEventListener("click", startCapture);
   document.getElementById("stop").addEventListener("click", stopCapture);
@@ -185,13 +340,27 @@ function bindUi() {
   document
     .getElementById("model-retrain")
     .addEventListener("click", retrainModel);
+
+  document.getElementById("rows-load").addEventListener("click", loadRows);
+  document
+    .getElementById("label-rename")
+    .addEventListener("click", renameSelectedLabel);
+  document
+    .getElementById("label-delete")
+    .addEventListener("click", deleteSelectedLabel);
+  document
+    .getElementById("delete-empty")
+    .addEventListener("click", deleteEmptyLabels);
+  document
+    .getElementById("dataset-clear")
+    .addEventListener("click", clearDataset);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   bindUi();
   setCapturing(false);
   setBufferCount();
-  refreshStats();
-  refreshModelStatus();
+  await refreshStats();
+  await refreshModelStatus();
   tick();
 });

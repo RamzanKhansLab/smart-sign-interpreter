@@ -1,9 +1,11 @@
-:root {
-  --bg: #f6f6f6;
-  --panel: #ffffff;
-  --text: #1d1d1d;
-  --accent: #1b4d89;
-  --border: #d9d9d9;
+﻿:root {
+  --bg: #0b0f14;
+  --panel: #111827;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --accent: #3b82f6;
+  --border: #243040;
+  --pre: #0f172a;
 }
 
 * {
@@ -70,6 +72,7 @@ body {
   display: flex;
   gap: 2rem;
   margin: 1rem 0;
+  color: var(--muted);
 }
 
 .btn {
@@ -79,34 +82,55 @@ body {
   padding: 0.6rem 1.2rem;
   border-radius: 6px;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn:hover {
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 label {
   display: block;
   margin-top: 0.8rem;
   margin-bottom: 0.3rem;
+  color: var(--muted);
 }
 
-input {
+input,
+select {
   width: 100%;
-  padding: 0.5rem;
+  padding: 0.55rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
+  background: #0b1220;
+  color: var(--text);
 }
 
 .actions {
   display: flex;
   gap: 0.5rem;
   margin-top: 1rem;
+  flex-wrap: wrap;
 }
 
 pre {
-  background: #f2f2f2;
+  background: var(--pre);
+  border: 1px solid var(--border);
   padding: 0.8rem;
-  border-radius: 4px;
+  border-radius: 6px;
   white-space: pre-wrap;
+  color: var(--text);
+}
+
+code {
+  color: var(--text);
+}
+
+.hint {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--muted);
 }

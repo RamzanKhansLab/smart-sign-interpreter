@@ -141,5 +141,22 @@ class SaveBatchRequest(BaseModel):
             return _normalize_label(value)
 
 
+class RenameLabelRequest(BaseModel):
+    from_label: str = Field(..., max_length=64)
+    to_label: str = Field(..., min_length=1, max_length=64)
+
+    if field_validator:
+
+        @field_validator("to_label")
+        def normalize_to_label(cls, value: str):
+            return _normalize_label(value)
+
+    if v1_validator and not field_validator:
+
+        @v1_validator("to_label")
+        def normalize_to_label_v1(cls, value: str):
+            return _normalize_label(value)
+
+
 class RetrainRequest(BaseModel):
     model_type: str = Field(default="knn")

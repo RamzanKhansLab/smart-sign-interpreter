@@ -7,6 +7,18 @@
 - `https://smart-sign-interpreter.onrender.com/api/latest`  
   `GET` endpoint: returns the most recent processed sensor message (whatever was last sent to `/api/sensor-data`). Returns `404` if nothing has been received yet.
 
+- `https://smart-sign-interpreter.onrender.com/api/dataset/save-batch`  
+  `POST` endpoint: saves multiple buffered samples with a single gesture label into `data/datasets/gesture_dataset.csv` (on the server).  
+  Body: `{"label":"HELLO","samples":[{...RawSensorData...}, ...]}`  
+  Note: `label` must be non-empty (whitespace-only labels are rejected).
+
 - `ws(s)://smart-sign-interpreter.onrender.com/ws/sensor-stream`  
   WebSocket endpoint: for real-time streaming updates to the browser/dashboard without polling. Use `wss://...` in production (HTTPS site → secure WebSocket).  
   Don’t include `:80` on Render; use `wss://smart-sign-interpreter.onrender.com/ws/sensor-stream`.
+
+Dataset editor endpoints (used by the Data Collection UI):
+- `GET /api/dataset/rows?limit=50&offset=0&label=HELLO` (label is optional)
+- `POST /api/dataset/rename-label` body: `{"from_label":"HELLO","to_label":"HI"}`
+- `POST /api/dataset/delete-label` body: `{"label":"HELLO"}`
+- `POST /api/dataset/delete-empty-labels`
+- `POST /api/dataset/clear`

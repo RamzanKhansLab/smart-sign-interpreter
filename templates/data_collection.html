@@ -4,7 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Data Collection</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', path='css/dashboard.css') }}"
+    />
   </head>
   <body>
     <div id="app">
@@ -39,6 +42,9 @@
               <h3>Label + Controls</h3>
               <label for="gesture-label">Gesture Label</label>
               <input id="gesture-label" type="text" placeholder="HELLO" />
+              <p class="hint">
+                Note: placeholder is not a label. You must type the label before saving.
+              </p>
 
               <div class="actions" style="margin-top: 1rem">
                 <button id="start" class="btn">START</button>
@@ -77,6 +83,37 @@
                 <button id="refresh-stats" class="btn">REFRESH</button>
               </div>
               <pre id="dataset-stats">Loading...</pre>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <h3>Dataset Editor</h3>
+
+              <label for="edit-label">Select Label</label>
+              <select id="edit-label"></select>
+
+              <div class="actions" style="margin-top: 0.75rem">
+                <button id="rows-load" class="btn">LOAD ROWS</button>
+                <button id="label-delete" class="btn">DELETE LABEL</button>
+              </div>
+
+              <label for="rename-to" style="margin-top: 1rem">Rename selected label to</label>
+              <input id="rename-to" type="text" placeholder="NEW_LABEL" />
+              <div class="actions" style="margin-top: 0.5rem">
+                <button id="label-rename" class="btn">RENAME</button>
+              </div>
+
+              <h3 style="margin-top: 1rem">Maintenance</h3>
+              <div class="actions">
+                <button id="delete-empty" class="btn">DELETE EMPTY LABELS</button>
+                <button id="dataset-clear" class="btn">CLEAR DATASET</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Rows Preview</h3>
+              <pre id="dataset-rows">Click LOAD ROWS</pre>
             </div>
           </div>
         </section>
