@@ -1,0 +1,67 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gesture Interpretation</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <h1>Gesture Interpretation</h1>
+        <div class="actions">
+          <a class="btn" href="/">Home</a>
+          <a class="btn" href="/collect">Data Collection</a>
+        </div>
+      </header>
+
+      <main class="panels">
+        <section class="panel active">
+          <div class="status">
+            <div>Connection: <span id="connection-status">DISCONNECTED</span></div>
+            <div>Streaming: <span id="stream-status">IDLE</span></div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <h3>Live Channels (s1..s5)</h3>
+              <ul>
+                <li>s1: <span id="s1">-</span></li>
+                <li>s2: <span id="s2">-</span></li>
+                <li>s3: <span id="s3">-</span></li>
+                <li>s4: <span id="s4">-</span></li>
+                <li>s5: <span id="s5">-</span></li>
+                <li>timestamp: <span id="timestamp">-</span></li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <h3>Prediction</h3>
+              <div id="prediction">MODEL NOT LOADED</div>
+            </div>
+
+            <div class="card">
+              <h3>Optional MPU6050</h3>
+              <ul>
+                <li>ax: <span id="ax">-</span></li>
+                <li>ay: <span id="ay">-</span></li>
+                <li>az: <span id="az">-</span></li>
+                <li>gx: <span id="gx">-</span></li>
+                <li>gy: <span id="gy">-</span></li>
+                <li>gz: <span id="gz">-</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Raw Message</h3>
+            <pre id="raw">Waiting for data...</pre>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="{{ url_for('static', path='js/interpretation.js') }}"></script>
+  </body>
+</html>

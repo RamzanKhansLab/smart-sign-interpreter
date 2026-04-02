@@ -1,0 +1,48 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Sign Glove</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <h1>Smart Sign Language Glove</h1>
+      </header>
+
+      <main class="panels">
+        <section class="panel active">
+          <div class="grid">
+            <div class="card">
+              <h2>Gesture Interpretation</h2>
+              <p>Shows live predicted gesture from incoming sensor data.</p>
+              <div class="actions">
+                <a class="btn" href="/interpret">Open Tool</a>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Data Collection</h2>
+              <p>Collect samples every 2 seconds, label, save, and retrain.</p>
+              <div class="actions">
+                <a class="btn" href="/collect">Open Tool</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Arduino → Backend payload (generic)</h3>
+            <pre>{
+  "channels": {"s1": 123, "s2": 456, "s3": 789, "s4": 12, "s5": 34},
+  "imu": {"ax": 0.01, "ay": 0.02, "az": 0.98, "gx": 1.2, "gy": 0.3, "gz": 0.1},
+  "timestamp": 1710000000000
+}</pre>
+            <p>POST this JSON to <code>/api/sensor-data</code>.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

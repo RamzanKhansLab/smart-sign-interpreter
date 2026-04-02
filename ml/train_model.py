@@ -81,18 +81,14 @@ def train_and_save(
     }
 
 
-def parse_args():
-    base_dir = Path(__file__).resolve().parents[1]
-    return argparse.ArgumentParser(
-        description="Train a lightweight gesture classifier."
-    ), base_dir
-
-
 def main():
-    parser, base_dir = parse_args()
+    base_dir = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(
+        description="Train a lightweight gesture classifier."
+    )
     parser.add_argument(
         "--dataset",
-        default=str(base_dir / "data" / "dataset.csv"),
+        default=str(base_dir / "data" / "datasets" / "gesture_dataset.csv"),
         help="Path to dataset CSV",
     )
     parser.add_argument(

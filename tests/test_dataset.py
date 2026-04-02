@@ -1,23 +1,17 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from ml.dataset_loader import load_dataset
-from dataset_tools.dataset_builder import append_row
+from app.services.dataset_recorder import DatasetRecorder
 
 
-def test_append_row_and_load_dataset(tmp_path):
-    dataset_path = tmp_path / "dataset.csv"
-    append_row(
-        dataset_path,
-        {
-            "thumb": 840,
-            "index": 210,
-            "middle": 205,
-            "ring": 220,
-            "little": 230,
-            "gesture": "HELLO",
-        },
-    )
-
-    X, y, _ = load_dataset(dataset_path)
-    assert X.shape[0] == 1
-    assert y[0] == "HELLO"
+def test_dataset_recorder(tmp_path):
+    recorder = DatasetRecorder(tmp_path / "dataset.csv")
+    sample = {
+        "channels": {"s1": 1, "s2": 2, "s3": 3},
+        "timestamp": 111,
+    }
+    recorder.save_sample(sample, "A")
+    recorder.save_samples([sample, sample], "B")
+    stats = recorder.stats()
+    assert stats["total"] == 3
+    assert stats["by_label"]["A"] == 1
+    assert stats["by_label"]["B"] == 2

@@ -28,8 +28,3 @@ def load_env_file(path: str | Path | None = None) -> None:
         value = value.strip().strip('"').strip("'")
         if key and key not in os.environ:
             os.environ[key] = value
-
-
-def ensure_dirs(paths) -> None:
-    for path in paths:
-        Path(path).mkdir(parents=True, exist_ok=True)

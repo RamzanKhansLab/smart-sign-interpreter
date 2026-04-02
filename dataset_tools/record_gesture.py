@@ -3,15 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from flask import Flask, jsonify, request
-
-# Allow import from project root
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from app.validators import ValidationError, validate_sensor_payload
 from dataset_tools.dataset_builder import append_row
 
 
@@ -23,16 +21,21 @@ def parse_serial_line(line: str) -> dict | None:
         if line.startswith("{"):
             return json.loads(line)
         parts = [p.strip() for p in line.split(",")]
-        if len(parts) != 5:
+        if len(parts) not in (5, 6):
             return None
         values = list(map(int, parts))
-        return {
-            "thumb": values[0],
-            "index": values[1],
-            "middle": values[2],
-            "ring": values[3],
-            "little": values[4],
+        data = {
+            "flex1": values[0],
+            "flex2": values[1],
+            "flex3": values[2],
+            "flex4": values[3],
+            "flex5": values[4],
         }
+        if len(values) == 6:
+            data["timestamp"] = values[5]
+        else:
+            data["timestamp"] = int(time.time() * 1000)
+        return data
     except Exception:
         return None
 
@@ -53,41 +56,56 @@ def run_serial(args):
             payload = parse_serial_line(line)
             if payload is None:
                 continue
+            payload["gesture"] = args.gesture
+            append_row(dataset_path, payload)
+            recorded += 1
+            print(f"Recorded {recorded}: {payload}")
+            if args.count and recorded >= args.count:
+                break
+
+
+def make_handler(dataset_path: Path, gesture: str):
+    class RecordHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            if self.path != "/record":
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length)
             try:
-                sensors = validate_sensor_payload(payload)
-                sensors["gesture"] = args.gesture
-                append_row(dataset_path, sensors)
-                recorded += 1
-                print(f"Recorded {recorded}: {sensors}")
-                if args.count and recorded >= args.count:
-                    break
-            except ValidationError as exc:
-                print(f"Invalid data: {exc}")
+                payload = json.loads(body)
+                if not isinstance(payload, dict):
+                    raise ValueError("Invalid payload")
+            except Exception:
+                self.send_response(400)
+                self.end_headers()
+                return
+
+            payload["gesture"] = gesture
+            if "timestamp" not in payload:
+                payload["timestamp"] = int(time.time() * 1000)
+            append_row(dataset_path, payload)
+
+            response = json.dumps({"status": "ok"}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+    return RecordHandler
 
 
 def run_http(args):
-    app = Flask(__name__)
     dataset_path = Path(args.dataset)
-    recorded = {"count": 0}
-
-    @app.route("/record", methods=["POST"])
-    def record():
-        try:
-            payload = request.get_json(silent=True)
-            if payload is None:
-                raise ValidationError("Invalid or missing JSON body")
-            sensors = validate_sensor_payload(payload)
-            sensors["gesture"] = args.gesture
-            append_row(dataset_path, sensors)
-            recorded["count"] += 1
-            return jsonify({"status": "ok", "count": recorded["count"]})
-        except ValidationError as exc:
-            return jsonify({"error": "validation_error", "details": exc.errors}), 400
-
+    handler = make_handler(dataset_path, args.gesture)
+    server = ThreadingHTTPServer((args.listen_host, args.listen_port), handler)
     print(
         f"HTTP recording server running on http://{args.listen_host}:{args.listen_port}/record"
     )
-    app.run(host=args.listen_host, port=args.listen_port)
+    server.serve_forever()
 
 
 def main():
@@ -95,7 +113,7 @@ def main():
     parser.add_argument("--gesture", required=True, help="Gesture label")
     parser.add_argument(
         "--dataset",
-        default=str(ROOT / "data" / "dataset.csv"),
+        default=str(ROOT / "data" / "datasets" / "gesture_dataset.csv"),
         help="Dataset CSV path",
     )
     parser.add_argument(

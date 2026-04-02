@@ -16,7 +16,7 @@ def main():
     parser.add_argument("--gesture", required=True, help="Gesture label")
     parser.add_argument(
         "--output",
-        default=str(ROOT / "data" / "dataset.csv"),
+        default=str(ROOT / "data" / "datasets" / "gesture_dataset.csv"),
         help="Output dataset CSV",
     )
 

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-FEATURE_COLUMNS = ["thumb", "index", "middle", "ring", "little"]
-EXPECTED_COLUMNS = FEATURE_COLUMNS + ["gesture"]
+FEATURE_COLUMNS = ['thumb', 'index', 'middle', 'ring', 'little']
+EXPECTED_COLUMNS = ["gesture", "timestamp"] + FEATURE_COLUMNS
 
 
 def load_dataset(dataset_path: str | Path):

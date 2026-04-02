@@ -1,0 +1,88 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data Collection</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <h1>Data Collection</h1>
+        <div class="actions">
+          <a class="btn" href="/">Home</a>
+          <a class="btn" href="/interpret">Interpretation</a>
+        </div>
+      </header>
+
+      <main class="panels">
+        <section class="panel active">
+          <div class="grid">
+            <div class="card">
+              <h3>Live Channels (preview)</h3>
+              <ul>
+                <li>s1: <span id="s1">-</span></li>
+                <li>s2: <span id="s2">-</span></li>
+                <li>s3: <span id="s3">-</span></li>
+                <li>s4: <span id="s4">-</span></li>
+                <li>s5: <span id="s5">-</span></li>
+                <li>timestamp: <span id="timestamp">-</span></li>
+              </ul>
+              <div class="status" style="margin-top: 1rem">
+                <div>Capture: <span id="capture-status">STOPPED</span></div>
+                <div>Buffered: <span id="buffer-count">0</span></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Label + Controls</h3>
+              <label for="gesture-label">Gesture Label</label>
+              <input id="gesture-label" type="text" placeholder="HELLO" />
+
+              <div class="actions" style="margin-top: 1rem">
+                <button id="start" class="btn">START</button>
+                <button id="stop" class="btn">STOP</button>
+              </div>
+
+              <div class="actions" style="margin-top: 0.5rem">
+                <button id="save" class="btn">SAVE</button>
+                <button id="clear" class="btn">CLEAR BUFFER</button>
+              </div>
+
+              <h3 style="margin-top: 1rem">Model</h3>
+              <div class="status">
+                <div>Loaded: <span id="model-loaded">-</span></div>
+              </div>
+
+              <label for="model-type">Retrain Model Type</label>
+              <input id="model-type" type="text" value="knn" />
+
+              <div class="actions" style="margin-top: 0.5rem">
+                <button id="model-reset" class="btn">RESET MODEL</button>
+                <button id="model-retrain" class="btn">RETRAIN</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <h3>Last Raw Message</h3>
+              <pre id="raw">Waiting for data...</pre>
+            </div>
+
+            <div class="card">
+              <h3>Dataset Statistics</h3>
+              <div class="actions">
+                <button id="refresh-stats" class="btn">REFRESH</button>
+              </div>
+              <pre id="dataset-stats">Loading...</pre>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="{{ url_for('static', path='js/data_collection.js') }}"></script>
+  </body>
+</html>

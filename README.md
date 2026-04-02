@@ -1,118 +1,111 @@
-# SMART SIGN LANGUAGE INTERPRETER
+# Smart Sign Language Glove Backend
 
-Production-grade Flask backend for a smart sign language interpreter that receives gesture glove sensor data, predicts gestures using lightweight ML models, and optionally speaks the result.
+## Project Overview
 
-## Overview
+This backend ingests **generic raw sensor data** from a sign-language glove over HTTP (WiFi), streams live predictions to a minimal Jinja2 UI, and stores labeled datasets for easy retraining.
 
-This backend:
+## System Architecture
 
-- Accepts HTTP POST sensor payloads
-- Validates sensor values (0–1023 integers)
-- Predicts gestures using a trained scikit-learn model
-- Optionally performs text-to-speech using `pyttsx3`
-- Includes dataset tooling, model training, and retraining automation
-- Provides CI, tests, and structured logging
+Components:
 
-## Architecture (High Level)
+- FastAPI backend with REST + WebSocket
+- Unified processing pipeline
+- Dataset recorder (CSV)
+- Optional ML prediction service
+- Minimal Jinja2 tools (Interpretation + Data Collection)
 
-- `app/` Flask API server and services
-- `ml/` Training and retraining pipeline
-- `dataset_tools/` Recording and labeling tools
-- `scripts/` Simulation utilities
-- `tests/` Pytest suite
+Data flow diagram:
 
-## Hardware Communication Flow
+```
+Sensors -> ATmega328P -> (WiFi HTTP / USB Serial)
+       -> FastAPI Backend -> Processing Pipeline
+       -> Dataset CSV / ML Model -> Web Dashboard
+```
 
-1. Glove sends sensor data via HTTP or serial.
-2. Backend validates payload.
-3. Values are transformed into model input.
-4. Model predicts gesture label.
-5. Response returned as JSON.
-6. Optional TTS output (speaker).
+## Hardware Setup
 
-## Example Request
+The backend expects a generic payload:
+
+- **`channels`**: at least 3 readings (hall sensors, flex sensors, etc.)
+- **`imu`** (optional): MPU6050 accelerometer/gyro (ax/ay/az/gx/gy/gz)
+- **`timestamp`** (optional): milliseconds since epoch
+
+Example accepted JSON:
 
 ```json
 {
-  "thumb": 840,
-  "index": 210,
-  "middle": 205,
-  "ring": 220,
-  "little": 230
+  "channels": { "s1": 100, "s2": 200, "s3": 300, "s4": 400, "s5": 500 },
+  "imu": { "ax": 0.01, "ay": 0.02, "az": 0.98, "gx": 1.2, "gy": 0.3, "gz": 0.1 },
+  "timestamp": 1710000000000
 }
 ```
 
-## Example Response
-
-```json
-{
-  "gesture": "HELLO"
-}
-```
-
-## Setup
+## Backend Server Setup
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Create/update `.env` with:
+Run the server:
 
 ```bash
-FLASK_PORT=5000
-MODEL_PATH=models/gesture_model.pkl
-ENABLE_TTS=false
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-## Train Model
+Dashboard:
+
+```
+http://localhost:8000/
+```
+
+WebSocket stream:
+
+```
+ws://localhost:8000/ws/sensor-stream
+```
+
+## WiFi Mode Usage
+
+Send HTTP packets to:
+
+```
+POST /api/sensor-data
+```
+
+Example:
 
 ```bash
-python ml/train_model.py
+curl -X POST http://localhost:8000/api/sensor-data \
+  -H "Content-Type: application/json" \
+  -d '{"channels":{"s1":100,"s2":200,"s3":300,"s4":400,"s5":500},"timestamp":1710000000000}'
 ```
 
-Model is saved to `models/gesture_model.pkl`.
+## Dataset Collection Tool
 
-## Run Backend
+Dataset file path:
 
-```bash
-python app/server.py
+```
+data/datasets/gesture_dataset.csv
 ```
 
-## Run Tests
+Data Collection tool:
+
+- Open `http://localhost:8000/collect`
+- Click **START** to buffer one sample every 2 seconds (from `/api/latest`)
+- Click **STOP**, enter the label, then **SAVE** (writes to the CSV)
+- Use **RESET MODEL** and **RETRAIN** to rebuild the model from the saved dataset
+
+Interpretation tool:
+
+- Open `http://localhost:8000/interpret`
+- Shows live channels + predicted gesture (via WebSocket)
+
+## ML Training Workflow
+
+Use the **RETRAIN** button in the Data Collection tool (recommended).
+
+## Testing Instructions
 
 ```bash
 pytest
 ```
-
-## Simulate Glove Input
-
-```bash
-python scripts/simulate_glove_sender.py --url http://localhost:5000/gesture --count 10
-```
-
-## Dataset Recording
-
-### Serial Mode
-
-```bash
-python dataset_tools/record_gesture.py --gesture HELLO --source serial --port COM3 --baud 9600
-```
-
-### HTTP Mode
-
-```bash
-python dataset_tools/record_gesture.py --gesture HELLO --source http --listen-port 6000
-```
-
-Send POST requests to `http://localhost:6000/record` with the sensor payload.
-
-## Model Retraining
-
-```bash
-python ml/retrain_model.py
-```
-
-## CI/CD
-
-- `ci.yml` runs lint + tests
-- `retrain.yml` retrains model on dataset changes and commits updated model

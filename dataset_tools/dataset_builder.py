@@ -3,8 +3,8 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-FEATURE_COLUMNS = ["thumb", "index", "middle", "ring", "little"]
-HEADER = FEATURE_COLUMNS + ["gesture"]
+FEATURE_COLUMNS = ["flex1", "flex2", "flex3", "flex4", "flex5"]
+HEADER = ["gesture"] + FEATURE_COLUMNS + ["timestamp"]
 
 
 def ensure_dataset(dataset_path: Path) -> None:
@@ -45,6 +45,8 @@ def build_from_raw(raw_path: str | Path, gesture: str, dataset_path: str | Path)
                 continue
             values = row[: len(FEATURE_COLUMNS)]
             data = dict(zip(FEATURE_COLUMNS, values))
+            if len(row) > len(FEATURE_COLUMNS):
+                data["timestamp"] = row[len(FEATURE_COLUMNS)]
             data["gesture"] = gesture
             writer.writerow(data)
             count += 1

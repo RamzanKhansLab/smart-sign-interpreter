@@ -8,23 +8,26 @@ import time
 import requests
 
 DEFAULT_PACKET = {
-    "thumb": 840,
-    "index": 210,
-    "middle": 205,
-    "ring": 220,
-    "little": 230,
+    "flex1": 840,
+    "flex2": 210,
+    "flex3": 205,
+    "flex4": 220,
+    "flex5": 230,
+    "timestamp": 0,
 }
 
 
 def generate_random_packet() -> dict:
-    return {key: random.randint(0, 1023) for key in DEFAULT_PACKET.keys()}
+    packet = {key: random.randint(0, 1023) for key in DEFAULT_PACKET.keys()}
+    packet["timestamp"] = int(time.time() * 1000)
+    return packet
 
 
 def main():
     parser = argparse.ArgumentParser(description="Simulate glove sensor sender.")
     parser.add_argument(
         "--url",
-        default="http://localhost:5000/gesture",
+        default="http://localhost:8000/api/sensor-data",
         help="Backend URL",
     )
     parser.add_argument("--count", type=int, default=10, help="Number of packets")
@@ -44,6 +47,8 @@ def main():
 
     for i in range(args.count):
         payload = generate_random_packet() if args.random else packet
+        if "timestamp" not in payload:
+            payload["timestamp"] = int(time.time() * 1000)
         response = requests.post(args.url, json=payload, timeout=5)
         print(f"{i + 1}: {response.status_code} {response.text}")
         time.sleep(args.interval)

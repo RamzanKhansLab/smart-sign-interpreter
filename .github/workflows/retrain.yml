@@ -3,7 +3,7 @@ name: Retrain Model
 on:
   push:
     paths:
-      - "data/dataset.csv"
+      - "data/datasets/gesture_dataset.csv"
 
 jobs:
   retrain:

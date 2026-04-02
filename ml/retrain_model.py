@@ -46,7 +46,7 @@ def main():
     parser = argparse.ArgumentParser(description="Retrain model when dataset changes.")
     parser.add_argument(
         "--dataset",
-        default=str(base_dir / "data" / "dataset.csv"),
+        default=str(base_dir / "data" / "datasets" / "gesture_dataset.csv"),
         help="Path to dataset CSV",
     )
     parser.add_argument(
