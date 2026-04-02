@@ -1,0 +1,12 @@
+- `https://smart-sign-interpreter.onrender.com/`  
+  Serves the main HTML dashboard page (`home.html`) from your `templates/` folder.
+
+- `https://smart-sign-interpreter.onrender.com/api/sensor-data`  
+  `POST` endpoint: your glove/device (or any client) sends live sensor readings as JSON. The backend processes it and updates the “latest” value (and can broadcast to WebSocket clients).
+
+- `https://smart-sign-interpreter.onrender.com/api/latest`  
+  `GET` endpoint: returns the most recent processed sensor message (whatever was last sent to `/api/sensor-data`). Returns `404` if nothing has been received yet.
+
+- `ws(s)://smart-sign-interpreter.onrender.com/ws/sensor-stream`  
+  WebSocket endpoint: for real-time streaming updates to the browser/dashboard without polling. Use `wss://...` in production (HTTPS site → secure WebSocket).  
+  Don’t include `:80` on Render; use `wss://smart-sign-interpreter.onrender.com/ws/sensor-stream`.

@@ -22,7 +22,15 @@ class DatasetRecorder:
                 writer = csv.DictWriter(handle, fieldnames=HEADER)
                 writer.writeheader()
 
+    def _normalize_label(self, label: str) -> str:
+        label = (label or "").strip()
+        if not label:
+            raise ValueError("label cannot be empty")
+        return label
+
     def _normalize_row(self, data: dict, label: str) -> dict:
+        label = self._normalize_label(label)
+
         channels = data.get("channels")
         imu = data.get("imu")
         if isinstance(channels, list):
@@ -61,7 +69,11 @@ class DatasetRecorder:
         with self._lock:
             with self.dataset_path.open("r", newline="", encoding="utf-8") as handle:
                 reader = csv.DictReader(handle)
-                gestures = [row.get("gesture", "") for row in reader if row]
+                gestures = [
+                    (row.get("gesture", "") or "")
+                    for row in reader
+                    if row and row.get("gesture") is not None
+                ]
         counts = Counter(gestures)
         return {
             "total": sum(counts.values()),

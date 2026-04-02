@@ -10,6 +10,18 @@ except ImportError:  # pragma: no cover - fallback for older Pydantic
     ConfigDict = None
     field_validator = None
 
+try:
+    from pydantic import validator as v1_validator
+except Exception:  # pragma: no cover
+    v1_validator = None
+
+
+def _normalize_label(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        raise ValueError("label cannot be empty")
+    return value
+
 
 class ImuData(BaseModel):
     if ConfigDict:
@@ -99,10 +111,34 @@ class SensorDataResponse(BaseModel):
 class LabelRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=64)
 
+    if field_validator:
+
+        @field_validator("label")
+        def normalize_label(cls, value: str):
+            return _normalize_label(value)
+
+    if v1_validator and not field_validator:
+
+        @v1_validator("label")
+        def normalize_label_v1(cls, value: str):
+            return _normalize_label(value)
+
 
 class SaveBatchRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=64)
     samples: List[RawSensorData] = Field(..., min_length=1, max_length=10000)
+
+    if field_validator:
+
+        @field_validator("label")
+        def normalize_label(cls, value: str):
+            return _normalize_label(value)
+
+    if v1_validator and not field_validator:
+
+        @v1_validator("label")
+        def normalize_label_v1(cls, value: str):
+            return _normalize_label(value)
 
 
 class RetrainRequest(BaseModel):
