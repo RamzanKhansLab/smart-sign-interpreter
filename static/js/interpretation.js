@@ -1,6 +1,7 @@
-const state = {
+﻿const state = {
   connected: false,
   pollTimer: null,
+  lastPrediction: null,
 };
 
 function setText(id, value) {
@@ -9,9 +10,33 @@ function setText(id, value) {
   el.textContent = value;
 }
 
+function setSpeakEnabled(enabled) {
+  const btn = document.getElementById("speak");
+  if (!btn) return;
+  btn.disabled = !enabled;
+}
+
 function getChannel(channels, key) {
   if (!channels) return null;
   return channels[key] ?? null;
+}
+
+function speak(text) {
+  if (!text) return;
+  if (!("speechSynthesis" in window)) {
+    alert("Text-to-speech is not supported in this browser.");
+    return;
+  }
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    alert("Failed to play voice.");
+  }
 }
 
 function updateFromMessage(message) {
@@ -35,22 +60,18 @@ function updateFromMessage(message) {
   setText("gz", imu.gz ?? "-");
 
   if (message.prediction !== null && message.prediction !== undefined) {
-    setText("prediction", message.prediction);
+    const pred = String(message.prediction);
+    state.lastPrediction = pred;
+    setText("prediction", pred);
+    setSpeakEnabled(true);
   } else {
+    state.lastPrediction = null;
     setText("prediction", "MODEL NOT LOADED");
+    setSpeakEnabled(false);
   }
 
   setText("raw", JSON.stringify(message, null, 2));
   setText("stream-status", "ACTIVE");
-}
-
-function showNoData(reason) {
-  setText("stream-status", "NO DATA");
-  setText(
-    "raw",
-    reason ||
-      "No sensor data yet. POST to /api/sensor-data or use the demo button on Home."
-  );
 }
 
 function setupWebSocket() {
@@ -77,29 +98,12 @@ function setupWebSocket() {
     state.connected = false;
   };
 
-  // Keep some proxies from closing an idle socket.
-  const pingTimer = setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.send("ping");
-      } catch (e) {
-        // ignore
-      }
-    }
-  }, 15000);
-
-  ws.addEventListener("close", () => clearInterval(pingTimer));
-
   return ws;
 }
 
 async function pollLatestOnce() {
   try {
     const res = await fetch("/api/latest");
-    if (res.status === 404) {
-      showNoData();
-      return;
-    }
     if (!res.ok) return;
     const message = await res.json();
     updateFromMessage(message);
@@ -117,8 +121,22 @@ function startPolling() {
   }, 2000);
 }
 
+function bindUi() {
+  const speakBtn = document.getElementById("speak");
+  if (speakBtn) {
+    speakBtn.addEventListener("click", () => {
+      if (!state.lastPrediction) {
+        alert("No prediction to speak yet.");
+        return;
+      }
+      speak(state.lastPrediction);
+    });
+  }
+  setSpeakEnabled(false);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  bindUi();
   setupWebSocket();
   startPolling();
-  pollLatestOnce();
 });
