@@ -10,22 +10,22 @@ from app.schemas import LabelRequest, RawSensorData, RetrainRequest, SaveBatchRe
 router = APIRouter()
 
 
-@router.get('/', response_class=HTMLResponse)
+@router.api_route('/', methods=['GET', 'HEAD'], response_class=HTMLResponse)
 def home(request: Request):
     templates = request.app.state.templates
-    return templates.TemplateResponse('home.html', {'request': request})
+    return templates.TemplateResponse(request, 'home.html')
 
 
 @router.get('/interpret', response_class=HTMLResponse)
 def interpretation_tool(request: Request):
     templates = request.app.state.templates
-    return templates.TemplateResponse('interpretation.html', {'request': request})
+    return templates.TemplateResponse(request, 'interpretation.html')
 
 
 @router.get('/collect', response_class=HTMLResponse)
 def data_collection_tool(request: Request):
     templates = request.app.state.templates
-    return templates.TemplateResponse('data_collection.html', {'request': request})
+    return templates.TemplateResponse(request, 'data_collection.html')
 
 
 @router.get('/api/health')
