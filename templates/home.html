@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -33,6 +33,24 @@
           </div>
 
           <div class="card">
+            <h3>Backend URLs</h3>
+            <p>Dashboard: <code>{{ request.base_url }}</code></p>
+            <p>Sensor ingest: <code>{{ request.base_url }}api/sensor-data</code></p>
+            <p>Latest sample: <code>{{ request.base_url }}api/latest</code></p>
+            <p>WebSocket: <code>ws(s)://{{ request.url.hostname }}:{{ request.url.port or 80 }}/ws/sensor-stream</code></p>
+          </div>
+
+          <div class="card">
+            <h3>Quick demo (no hardware)</h3>
+            <p>If your pages show "No sensor data", click this to publish a test packet.</p>
+            <div class="actions">
+              <button id="send-demo" class="btn">SEND DEMO PACKET</button>
+              <a class="btn" href="/interpret">VIEW STREAM</a>
+            </div>
+            <pre id="demo-output">Waiting...</pre>
+          </div>
+
+          <div class="card">
             <h3>Arduino → Backend payload (generic)</h3>
             <pre>{
   "channels": {"s1": 123, "s2": 456, "s3": 789, "s4": 12, "s5": 34},
@@ -44,5 +62,7 @@
         </section>
       </main>
     </div>
+
+    <script src="{{ url_for('static', path='js/home.js') }}"></script>
   </body>
 </html>

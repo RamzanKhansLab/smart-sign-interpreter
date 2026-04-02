@@ -1,4 +1,4 @@
-﻿const state = {
+const state = {
   capturing: false,
   timer: null,
   buffer: [],
@@ -33,6 +33,13 @@ function updatePreview(message) {
   setText("raw", JSON.stringify(message, null, 2));
 }
 
+function showNoData() {
+  setText(
+    "raw",
+    "No sensor data yet. POST to /api/sensor-data or use the demo button on Home."
+  );
+}
+
 function setCapturing(isCapturing) {
   state.capturing = isCapturing;
   setText("capture-status", isCapturing ? "RUNNING" : "STOPPED");
@@ -44,6 +51,7 @@ function setBufferCount() {
 
 async function fetchLatest() {
   const res = await fetch("/api/latest");
+  if (res.status === 404) return { __no_data: true };
   if (!res.ok) return null;
   return await res.json();
 }
@@ -52,6 +60,10 @@ async function tick() {
   try {
     const message = await fetchLatest();
     if (!message) return;
+    if (message.__no_data) {
+      showNoData();
+      return;
+    }
     updatePreview(message);
     if (state.capturing && message.data) {
       state.buffer.push(message.data);
@@ -168,9 +180,7 @@ function bindUi() {
     .getElementById("refresh-stats")
     .addEventListener("click", refreshStats);
 
-  document
-    .getElementById("model-reset")
-    .addEventListener("click", resetModel);
+  document.getElementById("model-reset").addEventListener("click", resetModel);
 
   document
     .getElementById("model-retrain")

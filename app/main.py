@@ -1,9 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -20,19 +22,33 @@ from app.services.processing import SensorPipeline
 def create_app() -> FastAPI:
     config = get_config()
 
-    log_file = Path(config.BASE_DIR) / "logs" / "app.log"
+    log_file = Path(config.BASE_DIR) / 'logs' / 'app.log'
     setup_logging(config.LOG_LEVEL, log_file)
-
-    app = FastAPI(title="Smart Sign Language Glove Backend")
-    app.state.config = config
-    app.state.templates = Jinja2Templates(directory="templates")
-
-    app.mount("/static", StaticFiles(directory="static"), name="static")
 
     ws_manager = ConnectionManager()
     recorder = DatasetRecorder(config.DATASET_PATH)
     ml_service = MLService(config.MODEL_PATH, config.ALLOW_MISSING_MODEL)
     pipeline = SensorPipeline(ws_manager, ml_service)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        pipeline.set_loop(asyncio.get_running_loop())
+        yield
+
+    app = FastAPI(title='Smart Sign Language Glove Backend', lifespan=lifespan)
+    app.state.config = config
+    app.state.templates = Jinja2Templates(directory='templates')
+
+    if config.CORS_ORIGINS:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=config.CORS_ORIGINS,
+            allow_credentials=False,
+            allow_methods=['*'],
+            allow_headers=['*'],
+        )
+
+    app.mount('/static', StaticFiles(directory='static'), name='static')
 
     app.state.ws_manager = ws_manager
     app.state.dataset_recorder = recorder
@@ -41,10 +57,6 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
     app.include_router(websocket_router)
-
-    @app.on_event("startup")
-    async def on_startup():
-        pipeline.set_loop(asyncio.get_running_loop())
 
     return app
 

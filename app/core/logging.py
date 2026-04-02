@@ -29,7 +29,7 @@ def setup_logging(log_level: str, log_file: str | Path | None = None) -> logging
     if logger.handlers:
         return logger
 
-    level = getattr(logging, log_level.upper(), logging.INFO)
+    level = getattr(logging, str(log_level).upper(), logging.INFO)
     logger.setLevel(level)
 
     formatter = JsonFormatter()
@@ -40,12 +40,18 @@ def setup_logging(log_level: str, log_file: str | Path | None = None) -> logging
     logger.addHandler(stream_handler)
 
     if log_file:
-        log_file = Path(log_file)
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setLevel(level)
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
+        try:
+            log_file = Path(log_file)
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setLevel(level)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except OSError as exc:
+            logger.warning(
+                "log_file_unavailable",
+                extra={"extra": {"log_file": str(log_file), "error": str(exc)}},
+            )
 
     logger.propagate = False
     return logger

@@ -1,4 +1,4 @@
-﻿const state = {
+const state = {
   connected: false,
   pollTimer: null,
 };
@@ -44,6 +44,15 @@ function updateFromMessage(message) {
   setText("stream-status", "ACTIVE");
 }
 
+function showNoData(reason) {
+  setText("stream-status", "NO DATA");
+  setText(
+    "raw",
+    reason ||
+      "No sensor data yet. POST to /api/sensor-data or use the demo button on Home."
+  );
+}
+
 function setupWebSocket() {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${protocol}://${window.location.host}/ws/sensor-stream`);
@@ -65,9 +74,21 @@ function setupWebSocket() {
   };
 
   ws.onerror = () => {
-    // Fall back to polling if needed.
     state.connected = false;
   };
+
+  // Keep some proxies from closing an idle socket.
+  const pingTimer = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send("ping");
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, 15000);
+
+  ws.addEventListener("close", () => clearInterval(pingTimer));
 
   return ws;
 }
@@ -75,6 +96,10 @@ function setupWebSocket() {
 async function pollLatestOnce() {
   try {
     const res = await fetch("/api/latest");
+    if (res.status === 404) {
+      showNoData();
+      return;
+    }
     if (!res.ok) return;
     const message = await res.json();
     updateFromMessage(message);
@@ -95,4 +120,5 @@ function startPolling() {
 document.addEventListener("DOMContentLoaded", () => {
   setupWebSocket();
   startPolling();
+  pollLatestOnce();
 });

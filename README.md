@@ -46,7 +46,13 @@ Example accepted JSON:
 pip install -r requirements.txt
 ```
 
-Run the server:
+Run the server (recommended):
+
+```bash
+python -m app
+```
+
+Run the server (uvicorn):
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -62,6 +68,31 @@ WebSocket stream:
 
 ```
 ws://localhost:8000/ws/sensor-stream
+```
+
+## If “data is not coming” on localhost
+
+The dashboard only shows data **after** something sends packets to `POST /api/sensor-data`.
+
+Options:
+
+- Use the Home page button: **SEND DEMO PACKET** (enabled by `ENABLE_DEMO=true` in `.env`)
+- Run the simulator:
+
+```bash
+python scripts/simulate_glove_sender.py --random --count 20
+```
+
+If your glove is on WiFi, make sure it posts to your PC’s LAN IP (not `localhost`). Example:
+
+```
+http://<YOUR_PC_IP>:8000/api/sensor-data
+```
+
+## Docker (optional)
+
+```bash
+docker compose up --build
 ```
 
 ## WiFi Mode Usage

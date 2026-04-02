@@ -1,3 +1,10 @@
-from app.main import app
+from __future__ import annotations
 
-__all__ = ["app"]
+
+def get_app():
+    from app.main import app
+
+    return app
+
+
+__all__ = ["get_app"]
