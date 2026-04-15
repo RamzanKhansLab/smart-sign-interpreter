@@ -101,7 +101,7 @@ def save_latest_sample(request: Request, payload: LabelRequest):
         recorder.save_sample(pipeline.latest_data, payload.label)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"status": "ok", "saved": 1}
+    return {"status": "ok", "saved": 1, "stats": recorder.stats()}
 
 
 @router.post("/api/dataset/save-batch")
@@ -114,7 +114,7 @@ def save_batch(request: Request, payload: SaveBatchRequest):
         saved = recorder.save_samples(samples, payload.label)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"status": "ok", "saved": saved}
+    return {"status": "ok", "saved": saved, "stats": recorder.stats()}
 
 
 @router.get("/api/dataset/stats")

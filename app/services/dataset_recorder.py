@@ -2,6 +2,7 @@
 
 import csv
 import json
+import os
 import threading
 from collections import Counter
 from pathlib import Path
@@ -11,16 +12,75 @@ HEADER = ["gesture", "timestamp", "channels", "imu"]
 
 class DatasetRecorder:
     def __init__(self, dataset_path: str | Path) -> None:
-        self.dataset_path = Path(dataset_path)
-        self._lock = threading.Lock()
+        self.dataset_path = Path(dataset_path).expanduser()
+        self._lock = threading.RLock()
         self._ensure_file()
 
     def _ensure_file(self) -> None:
+        with self._lock:
+            self._ensure_file_unlocked()
+
+    def _ensure_file_unlocked(self) -> None:
         self.dataset_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.dataset_path.exists():
-            with self.dataset_path.open("w", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=HEADER)
-                writer.writeheader()
+            self._write_header_file_unlocked()
+            return
+
+        if self.dataset_path.stat().st_size == 0:
+            self._write_header_file_unlocked()
+            return
+
+        with self.dataset_path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            first_row = next(reader, None)
+            if self._header_matches(first_row):
+                return
+
+            rows = []
+            if first_row:
+                rows.append(first_row)
+            rows.extend(row for row in reader if row)
+
+        if not rows:
+            self._write_header_file_unlocked()
+            return
+
+        if all(len(row) == len(HEADER) for row in rows):
+            # Repair older/headerless datasets without discarding the captured rows.
+            self._rewrite_rows_with_header_unlocked(rows)
+            return
+
+        raise ValueError(
+            f"Dataset file has an invalid CSV structure and cannot be repaired: {self.dataset_path}"
+        )
+
+    def _flush_handle(self, handle) -> None:
+        handle.flush()
+        try:
+            os.fsync(handle.fileno())
+        except OSError:
+            pass
+
+    def _write_header_file_unlocked(self) -> None:
+        with self.dataset_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(HEADER)
+            self._flush_handle(handle)
+
+    def _header_matches(self, row: list[str] | None) -> bool:
+        if not row:
+            return False
+        normalized = [cell.lstrip("\ufeff") for cell in row]
+        return normalized == HEADER
+
+    def _rewrite_rows_with_header_unlocked(self, rows: list[list[str]]) -> None:
+        tmp_path = self.dataset_path.with_suffix(self.dataset_path.suffix + ".tmp")
+        with tmp_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(HEADER)
+            writer.writerows(rows)
+            self._flush_handle(handle)
+        tmp_path.replace(self.dataset_path)
 
     def _normalize_label(self, label: str) -> str:
         label = (label or "").strip()
@@ -53,6 +113,7 @@ class DatasetRecorder:
             with self.dataset_path.open("a", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=HEADER)
                 writer.writerow(row)
+                self._flush_handle(handle)
 
     def save_samples(self, samples: list[dict], label: str) -> int:
         self._ensure_file()
@@ -62,6 +123,7 @@ class DatasetRecorder:
                 writer = csv.DictWriter(handle, fieldnames=HEADER)
                 for row in rows:
                     writer.writerow(row)
+                self._flush_handle(handle)
         return len(rows)
 
     def _parse_json_cell(self, raw: str | None) -> dict:
@@ -144,6 +206,7 @@ class DatasetRecorder:
                                 "imu": new_row.get("imu", "{}"),
                             }
                         )
+                    self._flush_handle(out)
             tmp_path.replace(self.dataset_path)
 
         return changed
@@ -180,6 +243,7 @@ class DatasetRecorder:
             with self.dataset_path.open("w", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=HEADER)
                 writer.writeheader()
+                self._flush_handle(handle)
 
     def stats(self) -> dict:
         self._ensure_file()

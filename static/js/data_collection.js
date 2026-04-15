@@ -1,9 +1,20 @@
-﻿const state = {
+const CAPTURE_INTERVAL_MS = 2000;
+const FALLBACK_POLL_INTERVAL_MS = 1000;
+const WS_RECONNECT_DELAY_MS = 1000;
+
+const state = {
   capturing: false,
-  timer: null,
+  captureTimer: null,
+  pollTimer: null,
+  ws: null,
+  connected: false,
   buffer: [],
   lastMessage: null,
+  latestData: null,
+  latestFingerprint: null,
+  lastBufferedFingerprint: null,
   labels: [],
+  savePending: false,
 };
 
 function setText(id, value) {
@@ -17,9 +28,30 @@ function getChannel(channels, key) {
   return channels[key] ?? null;
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function buildSampleFingerprint(data) {
+  if (!data) return null;
+  return JSON.stringify({
+    timestamp: data.timestamp ?? null,
+    channels: data.channels || {},
+    imu: data.imu || {},
+  });
+}
+
+function renderStats(data) {
+  if (!data) return;
+  setText("dataset-stats", JSON.stringify(data, null, 2));
+  updateLabelSelect(data.by_label || {});
+}
+
 function updatePreview(message) {
   if (!message || !message.data) return;
   state.lastMessage = message;
+  state.latestData = cloneJson(message.data);
+  state.latestFingerprint = buildSampleFingerprint(message.data);
 
   const data = message.data;
   const channels = data.channels || {};
@@ -35,6 +67,9 @@ function updatePreview(message) {
 }
 
 function showNoData() {
+  state.lastMessage = null;
+  state.latestData = null;
+  state.latestFingerprint = null;
   setText(
     "raw",
     "No sensor data yet. POST to /api/sensor-data or use the demo button on Home."
@@ -50,6 +85,14 @@ function setBufferCount() {
   setText("buffer-count", String(state.buffer.length));
 }
 
+function setSavePending(isPending) {
+  state.savePending = isPending;
+  const button = document.getElementById("save");
+  if (!button) return;
+  button.disabled = isPending;
+  button.textContent = isPending ? "SAVING..." : "SAVE";
+}
+
 async function fetchLatest() {
   const res = await fetch("/api/latest");
   if (res.status === 404) return { __no_data: true };
@@ -57,7 +100,7 @@ async function fetchLatest() {
   return await res.json();
 }
 
-async function tick() {
+async function pollLatestOnce() {
   try {
     const message = await fetchLatest();
     if (!message) return;
@@ -66,45 +109,99 @@ async function tick() {
       return;
     }
     updatePreview(message);
-    if (state.capturing && message.data) {
-      state.buffer.push(message.data);
-      setBufferCount();
-    }
   } catch (e) {
     // ignore
   }
 }
 
+function startPolling() {
+  if (state.pollTimer) return;
+  state.pollTimer = setInterval(() => {
+    if (!state.connected) {
+      pollLatestOnce();
+    }
+  }, FALLBACK_POLL_INTERVAL_MS);
+}
+
+function scheduleReconnect(previousSocket) {
+  window.setTimeout(() => {
+    if (state.ws === previousSocket && !state.connected) {
+      setupWebSocket();
+    }
+  }, WS_RECONNECT_DELAY_MS);
+}
+
+function setupWebSocket() {
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${protocol}://${window.location.host}/ws/sensor-stream`);
+  state.ws = ws;
+
+  ws.onopen = () => {
+    state.connected = true;
+  };
+
+  ws.onclose = () => {
+    state.connected = false;
+    scheduleReconnect(ws);
+  };
+
+  ws.onerror = () => {
+    state.connected = false;
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data);
+      updatePreview(message);
+    } catch (e) {
+      // ignore malformed websocket messages
+    }
+  };
+}
+
+function bufferLatestSample() {
+  if (!state.latestData || !state.latestFingerprint) return;
+  if (state.latestFingerprint === state.lastBufferedFingerprint) return;
+
+  state.buffer.push(cloneJson(state.latestData));
+  state.lastBufferedFingerprint = state.latestFingerprint;
+  setBufferCount();
+}
+
 function startCapture() {
-  if (state.timer) return;
+  if (state.captureTimer) return;
   setCapturing(true);
-  state.timer = setInterval(tick, 2000);
-  tick();
+  bufferLatestSample();
+  state.captureTimer = setInterval(bufferLatestSample, CAPTURE_INTERVAL_MS);
 }
 
 function stopCapture() {
   setCapturing(false);
-  if (state.timer) {
-    clearInterval(state.timer);
-    state.timer = null;
+  if (state.captureTimer) {
+    clearInterval(state.captureTimer);
+    state.captureTimer = null;
   }
 }
 
 function clearBuffer() {
   state.buffer = [];
+  state.lastBufferedFingerprint = null;
   setBufferCount();
 }
 
 function getLabel() {
-  const label = document.getElementById("gesture-label").value.trim();
-  return label;
+  return document.getElementById("gesture-label").value.trim();
 }
 
 async function refreshStats() {
   const res = await fetch("/api/dataset/stats");
+  if (!res.ok) {
+    setText("dataset-stats", "Failed to load dataset statistics.");
+    return null;
+  }
+
   const data = await res.json();
-  setText("dataset-stats", JSON.stringify(data, null, 2));
-  updateLabelSelect(data.by_label || {});
+  renderStats(data);
   return data;
 }
 
@@ -161,32 +258,53 @@ async function readErrorMessage(res) {
 }
 
 async function saveBuffer() {
+  if (state.savePending) return;
+
   const label = getLabel();
   if (!label) {
     alert("Enter a gesture label (placeholder does not count)");
     return;
   }
   if (state.buffer.length === 0) {
-    alert("Buffer is empty. Click START and wait for samples.");
+    alert("Buffer is empty. Click START and wait for fresh samples.");
     return;
   }
 
-  const res = await fetch("/api/dataset/save-batch", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label, samples: state.buffer }),
-  });
-
-  if (!res.ok) {
-    const msg = await readErrorMessage(res);
-    alert(msg || "Save failed");
-    return;
+  if (state.capturing) {
+    stopCapture();
   }
 
-  const out = await res.json();
-  alert(`Saved ${out.saved} samples for label '${label}'`);
-  clearBuffer();
-  await refreshStats();
+  const samplesToSave = state.buffer.map(cloneJson);
+  setSavePending(true);
+  try {
+    const res = await fetch("/api/dataset/save-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label, samples: samplesToSave }),
+    });
+
+    if (!res.ok) {
+      const msg = await readErrorMessage(res);
+      alert(msg || "Save failed");
+      return;
+    }
+
+    const out = await res.json();
+    alert(`Saved ${out.saved} samples for label '${label}'`);
+    state.buffer = state.buffer.slice(samplesToSave.length);
+    if (state.buffer.length === 0) {
+      state.lastBufferedFingerprint = null;
+    }
+    setBufferCount();
+
+    if (out.stats) {
+      renderStats(out.stats);
+    } else {
+      await refreshStats();
+    }
+  } finally {
+    setSavePending(false);
+  }
 }
 
 async function resetModel() {
@@ -321,6 +439,7 @@ async function clearDataset() {
     return;
   }
   alert("Dataset cleared");
+  clearBuffer();
   setText("dataset-rows", "Click LOAD ROWS");
   await refreshStats();
 }
@@ -360,7 +479,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindUi();
   setCapturing(false);
   setBufferCount();
+  setSavePending(false);
+  setupWebSocket();
+  startPolling();
   await refreshStats();
   await refreshModelStatus();
-  tick();
+  await pollLatestOnce();
 });
