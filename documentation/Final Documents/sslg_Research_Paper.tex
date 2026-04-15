@@ -138,32 +138,32 @@
 \newcommand{\TeamMemberD}{Ramzan Badruduja Khan}
 \newcommand{\GuideName}{Ms.\ Shaista Khan}
 \newcommand{\SubmissionDate}{March 2026}
-\newcommand{\TeamMemberAemail}{kushagra.2400231101@vcet.edu.in}
-\newcommand{\TeamMemberBemail}{afroz.2400181201@vcet.edu.in}
-\newcommand{\TeamMemberCemail}{sakshi.2400201209@vcet.edu.in}
-\newcommand{\TeamMemberDemail}{ramzan.2400251108@vcet.edu.in}
-\newcommand{\GuideNameemail}{shaista.khan@vcet.edu.in}
+\newcommand{\TeamMemberAemail}{\texttt{kushagra.2400231101@vcet.edu.in}}
+\newcommand{\TeamMemberBemail}{\texttt{afroz.2400181201@vcet.edu.in}}
+\newcommand{\TeamMemberCemail}{\texttt{sakshi.2400201209@vcet.edu.in}}
+\newcommand{\TeamMemberDemail}{\texttt{ramzan.2400251108@vcet.edu.in}}
+\newcommand{\GuideNameemail}{\texttt{shaista.khan@vcet.edu.in}}
 \newcommand{\CodeRepoUrl}{https://github.com/RamzanKhansLab/smart-sign-interpreter}
 
 \title{Smart Sign Language Gloves: A Real-Time\\ISL-to-Speech Translation System}
+
 \author{%
   \parbox{\textwidth}{\centering
     {\large\bfseries\GuideName}\\
     Assistant Professor\\
     \DeptName\\ \InstituteName\\
-    Email: \GuideNameemail\\[0.5cm]
+    \GuideNameemail\\[0.5cm]
     \begin{tabular}{@{}>{\centering\arraybackslash}p{0.48\textwidth}@{\hfill}
                         >{\centering\arraybackslash}p{0.48\textwidth}@{}}
       {\large\bfseries\TeamMemberA} & {\large\bfseries\TeamMemberB}\\
       \DeptName & \DeptName\\ \InstituteName & \InstituteName\\
-      Email: \TeamMemberAemail & Email: \TeamMemberBemail\\[0.5cm]
+      \TeamMemberAemail & \TeamMemberBemail\\[0.5cm]
       {\large\bfseries\TeamMemberC} & {\large\bfseries\TeamMemberD}\\
       \DeptName & \DeptName\\ \InstituteName & \InstituteName\\
-      Email: \TeamMemberCemail & Email: \TeamMemberDemail\\
+      \TeamMemberCemail & \TeamMemberDemail\\
     \end{tabular}
   }%
 }
-
 % ══════════════════════════════════════════════════════════════════════════════
 \begin{document}
 % ── Title page ────────────────────────────────────────────────────────────────
@@ -287,9 +287,8 @@ by a concise specification table.
 \begin{figure*}[!t]
   \centering
   \FrameBoxText{%
-    \begin{minipage}{0.96\linewidth}
-      \centering
-      \vspace{7pt}
+    \begin{minipage}{0.97\linewidth}
+      \centering\vspace{5pt}
       \begin{tikzpicture}[
           node distance = 14mm and 22mm,
           every node/.style={font=\scriptsize\sffamily}
@@ -326,15 +325,11 @@ by a concise specification table.
         \draw[mainarr] (wifi.south) -- (backend.north);
         \draw[mainarr] (backend.south) -- (webui.north);
 
-        % Backend → ML (routed to avoid overlaps and keep the connection clear)
-        \draw[mainarr]
-          (backend.west)
-          -- ++(-14mm,0)
-          |- ($(ml.east)+(0,6mm)$)
-          -- (ml.east);
+        % Backend → ML (clean L-shape)
+     \draw[mainarr, <->] (backend.west) -- (ml.east);
 
       \end{tikzpicture}
-      \vspace{7pt}
+      \vspace{5pt}
     \end{minipage}%
   }%
   \caption{%
