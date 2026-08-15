@@ -936,3 +936,8 @@ security-report.json
 
 core
 core.*
+
+
+# -----------current directory files ----------------
+
+data/datasets/gesture_dataset.csv
