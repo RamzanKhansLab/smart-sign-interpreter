@@ -26,7 +26,8 @@ class DatasetRecorder:
 
         Args:
             dataset_path: Path to local CSV file for backup
-            google_credentials_path: Path to Google service account credentials JSON
+            google_credentials_path: Path to Google service-account credentials
+                JSON, or the complete JSON document for an environment variable
             google_spreadsheet_id: Google Sheets spreadsheet ID
         """
         self.dataset_path = Path(dataset_path).expanduser()

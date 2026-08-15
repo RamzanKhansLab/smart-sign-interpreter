@@ -50,7 +50,8 @@ def train_and_save(
         model_type: Type of model to train
         test_size: Test set fraction
         random_state: Random seed
-        google_credentials_path: Path to Google credentials JSON
+        google_credentials_path: Path to Google credentials JSON or the complete
+            JSON document
         google_spreadsheet_id: Google Sheets spreadsheet ID
 
     Returns:

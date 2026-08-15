@@ -120,6 +120,7 @@ MODEL_PATH=models/gesture_model.pkl
 DATASET_PATH=data/datasets/gesture_dataset.csv
 
 # Google Sheets (Optional)
+# Accepts a credentials-file path or the complete service-account JSON value.
 GOOGLE_CREDENTIALS_PATH=/path/to/credentials.json
 GOOGLE_SPREADSHEET_ID=spreadsheet_id_here
 
@@ -172,7 +173,7 @@ docker compose up --build
 
 ```bash
 # Set environment variables in Render dashboard:
-# GOOGLE_CREDENTIALS_PATH=/var/data/google-credentials.json
+# GOOGLE_CREDENTIALS_PATH=<complete service-account JSON secret>
 # GOOGLE_SPREADSHEET_ID=your_id
 
 # Deploy
@@ -190,7 +191,7 @@ git push origin main
 
 ```bash
 # "Google Sheets integration failed"
-# → Check GOOGLE_CREDENTIALS_PATH exists
+# → Check GOOGLE_CREDENTIALS_PATH is a valid JSON document or an existing file path
 # → Check GOOGLE_SPREADSHEET_ID is correct
 # → Check APIs are enabled
 

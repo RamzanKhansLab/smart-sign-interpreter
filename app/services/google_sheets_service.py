@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Optional
 
 try:
     import gspread
-    from google.auth.transport.requests import Request
     from google.oauth2.service_account import Credentials
+
     GOOGLE_SHEETS_AVAILABLE = True
 except ImportError:
     GOOGLE_SHEETS_AVAILABLE = False
@@ -21,12 +20,14 @@ class GoogleSheetsService:
     SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
     HEADER = ["gesture", "timestamp", "channels", "imu"]
 
-    def __init__(self, credentials_json: str, spreadsheet_id: str):
+    def __init__(self, credentials_source: str, spreadsheet_id: str):
         """
         Initialize Google Sheets service.
 
         Args:
-            credentials_json: Path to Google service account credentials JSON file
+            credentials_source: Either a path to a service-account JSON file or
+                the complete service-account JSON document. The latter is useful
+                for a secret environment variable on platforms such as Render.
             spreadsheet_id: Google Sheets spreadsheet ID
         """
         if not GOOGLE_SHEETS_AVAILABLE:
@@ -36,21 +37,43 @@ class GoogleSheetsService:
             )
 
         self.spreadsheet_id = spreadsheet_id
-        self.credentials_path = credentials_json
+        self.credentials_source = credentials_source
         self.client = None
         self.worksheet = None
         self._initialize_client()
 
-    def _initialize_client(self) -> None:
-        """Initialize Google Sheets client."""
-        if not os.path.exists(self.credentials_path):
-            raise FileNotFoundError(
-                f"Google credentials file not found: {self.credentials_path}"
+    def _load_credentials(self):
+        """Load credentials from a JSON document or a JSON file path."""
+        source = (self.credentials_source or "").strip()
+        if not source:
+            raise ValueError("Google credentials were not provided")
+
+        if source.startswith("{"):
+            try:
+                credentials_info = json.loads(source)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "Google credentials must be valid JSON when provided inline"
+                ) from exc
+
+            if not isinstance(credentials_info, dict):
+                raise ValueError("Inline Google credentials must be a JSON object")
+
+            return Credentials.from_service_account_info(
+                credentials_info, scopes=self.SCOPES
             )
 
-        credentials = Credentials.from_service_account_file(
-            self.credentials_path, scopes=self.SCOPES
-        )
+        if not os.path.isfile(source):
+            raise FileNotFoundError(
+                "Google credentials file not found. Set GOOGLE_CREDENTIALS_PATH "
+                "to an existing file path or to the complete service-account JSON."
+            )
+
+        return Credentials.from_service_account_file(source, scopes=self.SCOPES)
+
+    def _initialize_client(self) -> None:
+        """Initialize Google Sheets client."""
+        credentials = self._load_credentials()
         self.client = gspread.authorize(credentials)
         self._get_or_create_worksheet()
 
@@ -143,12 +166,14 @@ class GoogleSheetsService:
             rows = []
             for row_values in all_values[1:]:
                 if len(row_values) >= 4:
-                    rows.append({
-                        "gesture": row_values[0],
-                        "timestamp": row_values[1],
-                        "channels": row_values[2],
-                        "imu": row_values[3],
-                    })
+                    rows.append(
+                        {
+                            "gesture": row_values[0],
+                            "timestamp": row_values[1],
+                            "channels": row_values[2],
+                            "imu": row_values[3],
+                        }
+                    )
             return rows
         except Exception as e:
             print(f"Error reading from Google Sheets: {str(e)}")

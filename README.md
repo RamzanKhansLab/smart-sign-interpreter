@@ -120,7 +120,8 @@ To ensure your training data persists, configure Google Sheets integration:
    - Fill in the details and click **Create and Continue**
    - Click **Create Key** → **JSON** → **Create**
    - A JSON file will be downloaded - **keep this safe!**
-   - This is your `GOOGLE_CREDENTIALS_PATH` file
+    - Keep this file safe; it can be supplied to the app as a file path or as an
+      inline secret environment-variable value
 
 3. **Enable Google Sheets API:**
    - In your Cloud project, go to **APIs & Services** → **Enabled APIs & Services**
@@ -139,14 +140,22 @@ To ensure your training data persists, configure Google Sheets integration:
    - Copy `.env.example` to `.env` (if not already done)
    - Add your credentials to `.env`:
    ```env
-   GOOGLE_CREDENTIALS_PATH=/path/to/google-credentials.json
-   GOOGLE_SPREADSHEET_ID=1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p
-   ```
+    # Option A: path to the downloaded JSON file
+    GOOGLE_CREDENTIALS_PATH=/path/to/google-credentials.json
+    GOOGLE_SPREADSHEET_ID=1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p
+    ```
+
+    On Render free tier, use **Option B** instead: create
+    `GOOGLE_CREDENTIALS_PATH` in the Render Environment dashboard and paste the
+    complete service-account JSON file as its secret value. Do not commit the
+    JSON to `.env` or the repository.
 
 6. **For Render Deployment:**
-   - Upload the JSON credentials file to Render's file storage or environment variables
-   - Set the environment variables in Render's dashboard:
-     - `GOOGLE_CREDENTIALS_PATH`: Path in the container
+    - Store the complete JSON credentials as a secret environment variable; no
+      credentials file needs to be uploaded on the free tier
+    - Set the environment variables in Render's dashboard:
+      - `GOOGLE_CREDENTIALS_PATH`: Complete service-account JSON (or a file path
+        when using a mounted disk)
      - `GOOGLE_SPREADSHEET_ID`: Your spreadsheet ID
    - Alternatively, use Render's **Secrets** feature to store the JSON file securely
 
@@ -233,18 +242,15 @@ With Google Sheets configured, your training data persists permanently:
      DATASET_PATH=data/datasets/gesture_dataset.csv
      LOG_LEVEL=INFO
      ALLOW_MISSING_MODEL=true
-     ENABLE_DEMO=true
-     GOOGLE_CREDENTIALS_PATH=/etc/secrets/google-credentials.json
-     GOOGLE_SPREADSHEET_ID=your_spreadsheet_id_here
+      ENABLE_DEMO=true
+      GOOGLE_CREDENTIALS_PATH=<paste the complete service-account JSON as a secret value>
+      GOOGLE_SPREADSHEET_ID=your_spreadsheet_id_here
      ```
 
 3. **Store Google credentials securely:**
-   - Option A: Upload to Render's mounted file system
-     - Create a file in your project (not in git): `.render/google-credentials.json`
-     - In Render dashboard → "Disk" → Mount at `/var/data`
-     - Adjust `GOOGLE_CREDENTIALS_PATH=/var/data/google-credentials.json`
-   - Option B: Use environment variables (for simple JSON)
-     - Set the JSON file content as a secret environment variable
+   - Recommended on the free tier: set `GOOGLE_CREDENTIALS_PATH` to the complete
+     JSON file content as a secret environment value.
+   - Optional for mounted storage: set it to the path of the JSON credentials file.
 
 4. **Deploy:**
    - Push changes to GitHub

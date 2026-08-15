@@ -123,23 +123,21 @@ A service account allows the application to authenticate with Google Sheets with
 
 #### For Render Deployment
 
-1. **Option A: Using Render's File Storage**
-   - Upload the JSON credentials file to Render's mounted file system
-   - Set `GOOGLE_CREDENTIALS_PATH` to the file's location
+1. In Render dashboard → Your service → **Environment**, add:
+   ```
+   GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
+   ```
 
-2. **Option B: Using Environment Variables**
-   - In Render dashboard → Your service → "Environment"
-   - Add these variables:
-     ```
-     GOOGLE_CREDENTIALS_PATH=/etc/secrets/google-credentials.json
-     GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
-     ```
+2. Add `GOOGLE_CREDENTIALS_PATH` as a **secret** environment variable. Its value
+   can be either:
+   - the complete contents of your downloaded service-account JSON file (best for
+     Render free tier, which does not need a credentials file on disk), or
+   - a path to that file when you have mounted storage.
 
-3. Upload the credentials file:
-   - Create `.render/google-credentials.json` (or your preferred location)
-   - Place your downloaded JSON file there
-   - In Render → "Disk" → Mount the directory
-   - Or upload via Render's file management
+3. When pasting JSON into `GOOGLE_CREDENTIALS_PATH`, paste only the JSON value;
+   do not add another `GOOGLE_CREDENTIALS_PATH=` inside the value. Do not commit
+   the JSON to the repository. For a local `.env` file, keep the JSON on one line
+   and preserve `\\n` inside the `private_key` field.
 
 ### 6. Verify the Setup
 
@@ -241,9 +239,10 @@ Body:
 
 **Possible causes:**
 
-1. **Credentials file not found**
-   - Verify the path in `GOOGLE_CREDENTIALS_PATH`
-   - Path must be absolute or relative to current working directory
+1. **Credentials file not found or JSON is invalid**
+   - If using a path, verify it in `GOOGLE_CREDENTIALS_PATH`; it may be absolute
+     or relative to the current working directory.
+   - If using inline credentials, paste the complete valid JSON document only.
 
 2. **Service account doesn't have access**
    - Go to the spreadsheet

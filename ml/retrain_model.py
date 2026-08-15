@@ -37,7 +37,7 @@ def retrain_if_needed(
         test_size: Test set fraction
         random_state: Random seed
         force: Force retrain regardless of hash
-        google_credentials_path: Google credentials path
+        google_credentials_path: Google credentials path or complete JSON document
         google_spreadsheet_id: Google Sheets ID
     """
     if google_credentials_path and google_spreadsheet_id:

@@ -65,31 +65,21 @@ Wait for Render to build and deploy (2-5 minutes).
    LOG_LEVEL: INFO
    ALLOW_MISSING_MODEL: true
    ENABLE_DEMO: true
-   GOOGLE_CREDENTIALS_PATH: /var/data/google-credentials.json
+   GOOGLE_CREDENTIALS_PATH: [PASTE_COMPLETE_SERVICE_ACCOUNT_JSON_AS_A_SECRET]
    GOOGLE_SPREADSHEET_ID: [YOUR_SPREADSHEET_ID]
    ```
 
    Replace `[YOUR_SPREADSHEET_ID]` with your actual Google Sheet ID.
 
-### Step 5: Upload Google Credentials
+### Step 5: Store Google Credentials Safely
 
-**Option A: Using Render Disk (Recommended)**
+For Render free tier, create `GOOGLE_CREDENTIALS_PATH` as a **secret** environment
+variable and paste the complete contents of the downloaded service-account JSON
+file as its value. This does not require uploading a credentials file to Render.
 
-1. In your service dashboard, click **"Disks"**
-2. Click **"Add Disk"**
-   - **Size**: 5 GB (minimum)
-   - **Mount Path**: `/var/data`
-   - Click **"Save"**
-
-3. Click **"Connect"** for the disk
-4. Follow the instructions to access the disk via WebDAV or SSH
-5. Upload your `google-credentials.json` file to `/var/data/`
-
-**Option B: Using Files Tab (Alternative)**
-
-1. In your service dashboard, go to the "Files" tab (if available)
-2. Upload the JSON credentials file
-3. Note the path provided
+Do not paste the key into the repository, a committed `.env` file, or a public
+support request. If you use a mounted disk on a paid plan, you may instead set
+`GOOGLE_CREDENTIALS_PATH` to the credentials file path.
 
 ### Step 6: Deploy
 
@@ -175,17 +165,17 @@ curl -X POST https://smart-sign-interpreter.onrender.com/api/model/retrain \
 1. Check the logs tab
 2. Common issues:
    - Missing environment variables
-   - Incorrect Google credentials path
+   - Invalid Google credentials JSON or an incorrect credentials path
    - Port already in use
 
 3. Click **"Manual Deploy"** to retry
 
 ### "Google Sheets integration failed" on Render
 
-1. Verify `GOOGLE_CREDENTIALS_PATH` matches the actual file location
-2. Check the file was uploaded to the disk
-3. Verify `GOOGLE_SPREADSHEET_ID` is correct
-4. Check Google Sheets API is enabled
+1. Verify `GOOGLE_CREDENTIALS_PATH` contains the complete valid JSON or matches
+   the credentials file location.
+2. Verify `GOOGLE_SPREADSHEET_ID` is correct.
+3. Check Google Sheets API is enabled.
 
 ### Data not appearing in Google Sheets
 
@@ -252,7 +242,7 @@ Render automatically deploys on push to main branch. To disable:
 - [ ] Service account credentials downloaded
 - [ ] Google Sheet created and shared
 - [ ] Environment variables configured
-- [ ] Credentials file uploaded to Render
+- [ ] Credentials stored as a Render secret (or uploaded to mounted storage)
 - [ ] Service deployed successfully
 - [ ] Test data collection working
 - [ ] Google Sheets receiving data
