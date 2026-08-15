@@ -7,13 +7,48 @@ import threading
 from collections import Counter
 from pathlib import Path
 
+from app.services.google_sheets_service import GoogleSheetsService
+
 HEADER = ["gesture", "timestamp", "channels", "imu"]
 
 
 class DatasetRecorder:
-    def __init__(self, dataset_path: str | Path) -> None:
+    """Dataset recorder supporting both local CSV and Google Sheets storage."""
+
+    def __init__(
+        self,
+        dataset_path: str | Path,
+        google_credentials_path: str | None = None,
+        google_spreadsheet_id: str | None = None,
+    ) -> None:
+        """
+        Initialize dataset recorder.
+
+        Args:
+            dataset_path: Path to local CSV file for backup
+            google_credentials_path: Path to Google service account credentials JSON
+            google_spreadsheet_id: Google Sheets spreadsheet ID
+        """
         self.dataset_path = Path(dataset_path).expanduser()
         self._lock = threading.RLock()
+        self.use_google_sheets = False
+        self.google_sheets = None
+
+        # Initialize Google Sheets if credentials provided
+        if google_credentials_path and google_spreadsheet_id:
+            try:
+                self.google_sheets = GoogleSheetsService(
+                    google_credentials_path, google_spreadsheet_id
+                )
+                self.use_google_sheets = True
+                print("✓ Google Sheets integration enabled for dataset storage")
+            except Exception as e:
+                print(
+                    f"⚠ Google Sheets initialization failed: {str(e)}"
+                    " - Falling back to local CSV storage"
+                )
+                self.use_google_sheets = False
+
         self._ensure_file()
 
     def _ensure_file(self) -> None:
@@ -110,6 +145,11 @@ class DatasetRecorder:
         self._ensure_file()
         row = self._normalize_row(data, label)
         with self._lock:
+            # Save to Google Sheets if available
+            if self.use_google_sheets and self.google_sheets:
+                self.google_sheets.append_row(row)
+
+            # Also save locally as backup
             with self.dataset_path.open("a", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=HEADER)
                 writer.writerow(row)
@@ -119,6 +159,11 @@ class DatasetRecorder:
         self._ensure_file()
         rows = [self._normalize_row(sample, label) for sample in samples]
         with self._lock:
+            # Save to Google Sheets if available
+            if self.use_google_sheets and self.google_sheets:
+                self.google_sheets.append_rows(rows)
+
+            # Also save locally as backup
             with self.dataset_path.open("a", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=HEADER)
                 for row in rows:
@@ -248,6 +293,22 @@ class DatasetRecorder:
     def stats(self) -> dict:
         self._ensure_file()
         with self._lock:
+            # Try to get stats from Google Sheets first
+            if self.use_google_sheets and self.google_sheets:
+                try:
+                    all_rows = self.google_sheets.get_all_rows()
+                    gestures = [row.get("gesture", "") for row in all_rows if row]
+                    counts = Counter(gestures)
+                    return {
+                        "total": sum(counts.values()),
+                        "by_label": dict(counts),
+                        "path": f"Google Sheets ({self.google_sheets.spreadsheet_id})",
+                        "storage": "google_sheets",
+                    }
+                except Exception:
+                    pass  # Fall back to local CSV
+
+            # Fall back to local CSV
             with self.dataset_path.open("r", newline="", encoding="utf-8") as handle:
                 reader = csv.DictReader(handle)
                 gestures = [
@@ -260,4 +321,5 @@ class DatasetRecorder:
             "total": sum(counts.values()),
             "by_label": dict(counts),
             "path": str(self.dataset_path),
+            "storage": "local_csv",
         }

@@ -18,6 +18,8 @@ class AppConfig:
     ALLOW_MISSING_MODEL: bool
     CORS_ORIGINS: list[str]
     ENABLE_DEMO: bool
+    GOOGLE_CREDENTIALS_PATH: str | None
+    GOOGLE_SPREADSHEET_ID: str | None
 
 
 def _parse_csv(value: str | None) -> list[str]:
@@ -44,4 +46,6 @@ def get_config() -> AppConfig:
         ALLOW_MISSING_MODEL=parse_bool(os.getenv('ALLOW_MISSING_MODEL', 'true')),
         CORS_ORIGINS=_parse_csv(os.getenv('CORS_ORIGINS', '')),
         ENABLE_DEMO=parse_bool(os.getenv('ENABLE_DEMO', 'true')),
+        GOOGLE_CREDENTIALS_PATH=os.getenv('GOOGLE_CREDENTIALS_PATH'),
+        GOOGLE_SPREADSHEET_ID=os.getenv('GOOGLE_SPREADSHEET_ID'),
     )

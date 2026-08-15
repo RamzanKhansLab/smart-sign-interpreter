@@ -174,7 +174,15 @@ def retrain_model(request: Request, payload: RetrainRequest):
     config = request.app.state.config
     ml_service = request.app.state.ml_service
     try:
-        metrics = ml_service.retrain(config.DATASET_PATH, model_type=payload.model_type)
+        # Try Google Sheets first if configured, otherwise fall back to local CSV
+        if config.GOOGLE_CREDENTIALS_PATH and config.GOOGLE_SPREADSHEET_ID:
+            metrics = ml_service.retrain(
+                model_type=payload.model_type,
+                google_credentials_path=config.GOOGLE_CREDENTIALS_PATH,
+                google_spreadsheet_id=config.GOOGLE_SPREADSHEET_ID,
+            )
+        else:
+            metrics = ml_service.retrain(config.DATASET_PATH, model_type=payload.model_type)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "ok", "metrics": metrics}

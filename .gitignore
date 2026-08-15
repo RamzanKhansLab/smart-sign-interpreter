@@ -1,25 +1,938 @@
-**pycache**
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.sqlite
-*.log
+# ============================================================
+# SMART SIGN INTERPRETER - COMPREHENSIVE GITIGNORE
+# ============================================================
+
+
+# ============================================================
+# ENVIRONMENT VARIABLES / SECRETS / CREDENTIALS
+# ============================================================
+
 .env
+.env.*
+!.env.example
+!.env.template
+!.env.sample
+
+*.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+*.env.staging
+
+# Generic secrets
+secrets/
+secret/
+secrets.*
+secret.*
+credentials/
+credential/
+credentials.*
+credential.*
+
+*.secret
+*.secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+
+# Google Cloud / Firebase
+*-firebase-adminsdk-*.json
+firebase-adminsdk-*.json
+google-credentials.json
+google-cloud-credentials.json
+gcp-credentials.json
+service-account.json
+serviceAccount.json
+**/service-account*.json
+**/*service-account*.json
+**/*credentials*.json
+**/*credential*.json
+
+# Explicitly ignore all JSON credentials under secrets
+secrets/*.json
+**/secrets/*.json
+
+# AWS
+.aws/
+.aws/credentials
+.aws/config
+*.aws
+aws-credentials
+aws_credentials
+
+# Azure
+.azure/
+azure-credentials
+azure_credentials
+
+# Google Cloud
+.gcloud/
+.config/gcloud/
+application_default_credentials.json
+
+# Kubernetes
+kubeconfig
+kubeconfig.*
+.kube/config
+
+# Terraform secrets/state
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# SSH
+.ssh/
+id_rsa
+id_rsa.pub
+id_dsa
+id_ecdsa
+id_ed25519
+*.pub
+
+# Private keys
+private.key
+private.pem
+private.p12
+private.pfx
+server.key
+server.pem
+
+
+# ============================================================
+# PYTHON
+# ============================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.so
+
+.Python
+python
+python3
+
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+nosetests.xml
+
+.tox/
+.nox/
+.hypothesis/
+
+.pytest_cache/
+
+# Python virtual environments
 .venv/
 venv/
+env/
 ENV/
-.env.*
-.pytest_cache/
-pytest_cache/
-.coverage
-coverage/
-htmlcov/
+env.bak/
+venv.bak/
+
+# Conda
+.conda/
+conda-env/
+
+# PDM
+.pdm-python
+.pdm-build/
+
+# Poetry
+.poetry/
+
+# Hatch
+.hatch/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Python version managers
+.python-version
+
+
+# ============================================================
+# FASTAPI / UVICORN
+# ============================================================
+
+uvicorn.log
+*.uvicorn.log
+
+# Local API logs
+api.log
+server.log
+application.log
+
+
+# ============================================================
+# NODE.JS
+# ============================================================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.npm/
+.yarn/
+.yarn-cache/
+.pnpm-store/
+
+npm-cache/
+yarn-cache/
+
+package-lock.json.tmp
+npm-shrinkwrap.json.tmp
+
+# Node environment
+node.env
+.env.node
+
+
+# ============================================================
+# JAVASCRIPT / TYPESCRIPT
+# ============================================================
+
+*.tsbuildinfo
+
+# TypeScript build output
+lib/
+out/
+.eslintcache
+
+# JavaScript build artifacts
+*.min.js
+*.bundle.js
+
+
+# ============================================================
+# FRONTEND FRAMEWORKS
+# ============================================================
+
+# React
+.react/
+
+# Next.js
+.next/
+out/
+
+# Nuxt
+.nuxt/
+.output/
+
+# Vue
+.vue/
+
+# Angular
+.angular/
 dist/
+
+# Svelte
+.svelte-kit/
+
+# Vite
+.vite/
+
+# Astro
+.astro/
+
+# Remix
+.build/
+
+# Gatsby
+.cache/
+public/
+
+# Parcel
+.parcel-cache/
+
+# Turborepo
+.turbo/
+
+# Nx
+.nx/
+
+
+# ============================================================
+# BUILD / COMPILED OUTPUT
+# ============================================================
+
 build/
-.DS_Store
-.idea/
-.vscode/
+dist/
+out/
+target/
+release/
+debug/
+
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.bin
+
+
+# ============================================================
+# MACHINE LEARNING / AI
+# ============================================================
+
+# Model files
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.pb
+*.h5
+*.hdf5
+*.keras
+*.tflite
+*.joblib
+*.pkl
+*.pickle
+*.bin
+
+# Large ML model directories
+models/
+model/
+checkpoints/
+checkpoint/
+weights/
+pretrained/
+pretrained_models/
+
+# Hugging Face
+.cache/
+huggingface/
+.huggingface/
+transformers_cache/
+
+# PyTorch
+torch_cache/
+
+# TensorFlow
+tensorflow_cache/
+
+# TensorBoard
+runs/
+tensorboard/
 logs/
-models/*.pkl
-*.egg-info/
+
+
+# ============================================================
+# DATASETS / LARGE DATA
+# ============================================================
+
+datasets/
+dataset/
+data/
+raw_data/
+processed_data/
+training_data/
+validation_data/
+test_data/
+
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.arrow
+
+# Images used as datasets
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
+
+# Audio/video datasets
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+
+# ============================================================
+# USER UPLOADS / GENERATED FILES
+# ============================================================
+
+uploads/
+upload/
+user_uploads/
+media/
+static/uploads/
+app/uploads/
+tmp/
+temp/
+temporary/
+
+generated/
+generated_files/
+output/
+outputs/
+results/
+
+*.tmp
+*.temp
+
+
+# ============================================================
+# DATABASES
+# ============================================================
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local database directories
+database/
+databases/
+db/
+data/db/
+
+# MongoDB local files
+mongodb/
+mongo-data/
+mongodb-data/
+
+# Redis
+dump.rdb
+appendonly.aof
+
+# PostgreSQL local files
+*.pgdata
+
+
+# ============================================================
+# LOGS
+# ============================================================
+
+*.log
+logs/
+log/
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+pip-log.txt
+
+
+# ============================================================
+# CACHE
+# ============================================================
+
+.cache/
+.cache-loader/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+coverage/
+
+
+# ============================================================
+# DOCKER
+# ============================================================
+
+docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.dev.yml
+.docker/
+docker-data/
+docker-volumes/
+
+# Docker environment files
+docker.env
+docker-compose.env
+
+
+# ============================================================
+# IDE - VISUAL STUDIO CODE
+# ============================================================
+
+.vscode/
+*.code-workspace
+
+# Keep shared VS Code settings if desired
+!.vscode/extensions.json
+!.vscode/settings.json
+
+
+# ============================================================
+# JETBRAINS / PYCHARM / INTELLIJ
+# ============================================================
+
+.idea/
+*.iml
+*.iws
+*.ipr
+
+
+# ============================================================
+# VISUAL STUDIO
+# ============================================================
+
+.vs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.sln.docstates
+
+
+# ============================================================
+# ECLIPSE
+# ============================================================
+
+.project
+.classpath
+.settings/
+
+
+# ============================================================
+# JAVA / MAVEN / GRADLE
+# ============================================================
+
+*.class
+
+target/
+bin/
+out/
+
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+*.war
+*.ear
+*.jar
+
+
+# ============================================================
+# C / C++
+# ============================================================
+
+*.d
+*.gch
+*.pch
+CMakeFiles/
+CMakeCache.txt
+cmake-build-*/
+compile_commands.json
+Makefile
+
+
+# ============================================================
+# RUST
+# ============================================================
+
+target/
+Cargo.lock
+
+
+# ============================================================
+# GO
+# ============================================================
+
+bin/
+vendor/
+*.test
+*.out
+
+
+# ============================================================
+# PHP / LARAVEL
+# ============================================================
+
+/vendor/
+.phpunit.result.cache
+.phpunit.cache/
+
+.env
+.env.*
+
+
+# ============================================================
+# RUBY / RAILS
+# ============================================================
+
+.bundle/
+vendor/bundle
+*.gem
+*.rbc
+/.bundle/
+
+
+# ============================================================
+# DART / FLUTTER
+# ============================================================
+
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+
+.flutter-plugins
+.flutter-plugins-dependencies
+
+
+# ============================================================
+# MOBILE / ANDROID
+# ============================================================
+
+.gradle/
+.idea/
+local.properties
+*.apk
+*.aab
+captures/
+.externalNativeBuild/
+.cxx/
+
+
+# ============================================================
+# IOS / XCODE
+# ============================================================
+
+DerivedData/
+build/
+*.xcuserstate
+*.xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+Pods/
+
+
+# ============================================================
+# OPERATING SYSTEM FILES
+# ============================================================
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+.Trash-*
+.nfs*
+
+
+# ============================================================
+# ARCHIVES
+# ============================================================
+
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.bz2
+*.xz
+
+
+# ============================================================
+# BACKUPS
+# ============================================================
+
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.swp
+*.swo
+*~
+*.tmp
+
+
+# ============================================================
+# GENERATED DOCUMENTS / REPORTS
+# ============================================================
+
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+
+# Uncomment these if your project documentation should be
+# version-controlled:
+# !docs/*.pdf
+# !docs/*.docx
+
+
+# ============================================================
+# CERTIFICATES / TLS
+# ============================================================
+
+*.pem
+*.key
+*.crt
+*.cer
+*.csr
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+
+# ============================================================
+# API KEYS / TOKENS
+# ============================================================
+
+*.token
+*.tokens
+*.apikey
+*.api_key
+*.access_token
+*.refresh_token
+
+# Common credential filenames
+credentials.json
+credential.json
+credentials.yml
+credentials.yaml
+credentials.toml
+config.secret.json
+config.private.json
+config.production.json
+config.prod.json
+
+# OAuth
+oauth.json
+oauth_credentials.json
+client_secret.json
+client_secrets.json
+
+# JWT
+jwt_secret
+jwt_secret.txt
+jwt_private.key
+jwt_private.pem
+
+
+# ============================================================
+# CLOUD / CI/CD
+# ============================================================
+
+# GitHub
+.github/*.local
+.github/secrets/
+
+# Vercel
+.vercel/
+
+# Netlify
+.netlify/
+
+# Render
+.render/
+
+# Railway
+.railway/
+
+# Heroku
+.heroku/
+
+# Firebase
+.firebase/
+.firebaserc.local
+firebase-debug.log
+firebase-debug.*.log
+
+# Serverless
+.serverless/
+.aws-sam/
+
+
+# ============================================================
+# TERRAFORM
+# ============================================================
+
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+
+# ============================================================
+# KUBERNETES
+# ============================================================
+
+*.kubeconfig
+kubeconfig
+.kube/
+
+
+# ============================================================
+# LLM / AI TOOLING
+# ============================================================
+
+# Local model caches
+ollama/
+lm-studio/
+llama.cpp/models/
+
+# OpenAI local secrets/config
+.openai/
+openai.json
+
+# Anthropic
+.anthropic/
+
+# API configuration
+ai-config.json
+llm-config.json
+llm_config.json
+
+
+# ============================================================
+# NOTEBOOK / EXPERIMENT OUTPUT
+# ============================================================
+
+*.html
+*.csv
+*.jsonl
+
+# Keep configuration JSON if explicitly needed
+!config/*.json
+
+# Experiment folders
+experiments/
+experiment_outputs/
+notebooks/output/
+
+
+# ============================================================
+# LOCAL CONFIGURATION
+# ============================================================
+
+config.local.*
+config.local/
+local.config.*
+local_settings.py
+settings.local.py
+settings.production.py
+
+# Production configurations
+production/
+prod/
+staging/
+development.local/
+
+
+# ============================================================
+# TEMPORARY DEVELOPMENT FILES
+# ============================================================
+
+scratch/
+sandbox/
+temp/
+tmp/
+debug/
+debug-output/
+test-output/
+
+
+# ============================================================
+# SECRET SCANNING / SECURITY TOOL OUTPUT
+# ============================================================
+
+.gitleaks/
+gitleaks-report.json
+gitleaks-report.csv
+trufflehog/
+security-report.json
+
+
+# ============================================================
+# MISCELLANEOUS
+# ============================================================
+
+*.dump
+*.trace
+*.prof
+*.profraw
+*.stackdump
+*.pid
+*.pid.lock
+
+core
+core.*

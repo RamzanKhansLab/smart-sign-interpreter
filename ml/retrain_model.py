@@ -16,29 +16,65 @@ def compute_hash(path: Path) -> str:
 
 
 def retrain_if_needed(
-    dataset_path: Path,
-    model_path: Path,
-    hash_path: Path,
-    model_type: str,
-    test_size: float,
-    random_state: int,
-    force: bool,
+    dataset_path: Path = None,
+    model_path: Path = None,
+    hash_path: Path = None,
+    model_type: str = "knn",
+    test_size: float = 0.2,
+    random_state: int = 42,
+    force: bool = False,
+    google_credentials_path: str = None,
+    google_spreadsheet_id: str = None,
 ):
-    dataset_hash = compute_hash(dataset_path)
-    if not force and hash_path.is_file():
-        existing = hash_path.read_text().strip()
-        if existing == dataset_hash:
+    """
+    Retrain model if dataset has changed or force is True.
+
+    Args:
+        dataset_path: Local CSV dataset path
+        model_path: Model output path
+        hash_path: Path to store dataset hash
+        model_type: Type of model to train
+        test_size: Test set fraction
+        random_state: Random seed
+        force: Force retrain regardless of hash
+        google_credentials_path: Google credentials path
+        google_spreadsheet_id: Google Sheets ID
+    """
+    if google_credentials_path and google_spreadsheet_id:
+        # For Google Sheets, always retrain (no hash comparison)
+        print("🔄 Retraining model with Google Sheets data...")
+        metrics = train_and_save(
+            model_path=str(model_path),
+            model_type=model_type,
+            test_size=test_size,
+            random_state=random_state,
+            google_credentials_path=google_credentials_path,
+            google_spreadsheet_id=google_spreadsheet_id,
+        )
+        if hash_path:
+            hash_path.write_text("google_sheets")
+        return True, metrics
+    else:
+        # Local CSV path - use hash comparison
+        if not dataset_path or not dataset_path.is_file():
             return False, None
 
-    metrics = train_and_save(
-        dataset_path=str(dataset_path),
-        model_path=str(model_path),
-        model_type=model_type,
-        test_size=test_size,
-        random_state=random_state,
-    )
-    hash_path.write_text(dataset_hash)
-    return True, metrics
+        dataset_hash = compute_hash(dataset_path)
+        if not force and hash_path.is_file():
+            existing = hash_path.read_text().strip()
+            if existing == dataset_hash:
+                return False, None
+
+        metrics = train_and_save(
+            dataset_path=str(dataset_path),
+            model_path=str(model_path),
+            model_type=model_type,
+            test_size=test_size,
+            random_state=random_state,
+        )
+        if hash_path:
+            hash_path.write_text(dataset_hash)
+        return True, metrics
 
 
 def main():
@@ -67,10 +103,18 @@ def main():
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--google-credentials",
+        help="Path to Google service account credentials JSON",
+    )
+    parser.add_argument(
+        "--google-spreadsheet-id",
+        help="Google Sheets spreadsheet ID",
+    )
 
     args = parser.parse_args()
 
-    dataset_path = Path(args.dataset)
+    dataset_path = Path(args.dataset) if args.dataset else None
     model_path = Path(args.model_path)
     hash_path = Path(args.hash_path)
 
@@ -82,14 +126,16 @@ def main():
         test_size=args.test_size,
         random_state=args.random_state,
         force=args.force,
+        google_credentials_path=args.google_credentials,
+        google_spreadsheet_id=args.google_spreadsheet_id,
     )
 
     if not retrained:
         print("Dataset unchanged. Skipping retrain.")
         return
 
-    print(f"Model saved to {metrics['model_path']}")
-    print(f"Accuracy: {metrics['accuracy']:.4f}")
+    print(f"✓ Model saved to {metrics['model_path']}")
+    print(f"✓ Accuracy: {metrics['accuracy']:.4f}")
 
 
 if __name__ == "__main__":

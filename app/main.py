@@ -26,7 +26,11 @@ def create_app() -> FastAPI:
     setup_logging(config.LOG_LEVEL, log_file)
 
     ws_manager = ConnectionManager()
-    recorder = DatasetRecorder(config.DATASET_PATH)
+    recorder = DatasetRecorder(
+        config.DATASET_PATH,
+        google_credentials_path=config.GOOGLE_CREDENTIALS_PATH,
+        google_spreadsheet_id=config.GOOGLE_SPREADSHEET_ID,
+    )
     ml_service = MLService(config.MODEL_PATH, config.ALLOW_MISSING_MODEL)
     pipeline = SensorPipeline(ws_manager, ml_service)
 

@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 
-from .dataset_loader import load_dataset
+from .dataset_loader import load_dataset, load_dataset_from_google_sheets
 from .evaluate_model import evaluate_model
 
 MODEL_REGISTRY = {
@@ -33,13 +33,43 @@ def build_model(model_type: str, random_state: int):
 
 
 def train_and_save(
-    dataset_path: str,
-    model_path: str,
+    dataset_path: str = None,
+    model_path: str = None,
     model_type: str = "knn",
     test_size: float = 0.2,
     random_state: int = 42,
+    google_credentials_path: str = None,
+    google_spreadsheet_id: str = None,
 ):
-    X, y, _ = load_dataset(dataset_path)
+    """
+    Train and save a gesture recognition model.
+
+    Args:
+        dataset_path: Path to local CSV dataset
+        model_path: Path to save the trained model
+        model_type: Type of model to train
+        test_size: Test set fraction
+        random_state: Random seed
+        google_credentials_path: Path to Google credentials JSON
+        google_spreadsheet_id: Google Sheets spreadsheet ID
+
+    Returns:
+        Dictionary with training metrics
+    """
+    # Load dataset from Google Sheets if credentials provided, otherwise from local CSV
+    if google_credentials_path and google_spreadsheet_id:
+        print("📊 Loading dataset from Google Sheets...")
+        X, y, _ = load_dataset_from_google_sheets(
+            google_credentials_path, google_spreadsheet_id
+        )
+    elif dataset_path:
+        print(f"📊 Loading dataset from {dataset_path}...")
+        X, y, _ = load_dataset(dataset_path)
+    else:
+        raise ValueError(
+            "Either dataset_path or (google_credentials_path and google_spreadsheet_id) must be provided"
+        )
+
     if len(set(y)) < 2:
         raise ValueError("Dataset must contain at least two gesture classes")
 

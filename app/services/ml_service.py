@@ -185,13 +185,75 @@ class MLService:
             raise ValueError("Dataset must contain at least two gesture classes")
         return X, y
 
+    def _load_dataset_from_google_sheets(
+        self, credentials_path: str, spreadsheet_id: str
+    ):
+        """Load dataset from Google Sheets."""
+        try:
+            from app.services.google_sheets_service import GoogleSheetsService
+        except ImportError:
+            raise RuntimeError(
+                "Google Sheets libraries not installed. "
+                "Install with: pip install gspread google-auth google-auth-oauthlib"
+            )
+
+        google_sheets = GoogleSheetsService(credentials_path, spreadsheet_id)
+        rows = google_sheets.get_all_rows()
+
+        if not rows:
+            raise ValueError("No data found in Google Sheets")
+
+        X: list[dict[str, float]] = []
+        y: list[str] = []
+
+        for row in rows:
+            label = (row.get("gesture", "") or "").strip()
+            if not label:
+                continue
+
+            channels_raw = row.get("channels") or "{}"
+            imu_raw = row.get("imu") or "{}"
+            try:
+                channels = json.loads(channels_raw)
+            except Exception:
+                channels = {}
+            try:
+                imu = json.loads(imu_raw)
+            except Exception:
+                imu = {}
+
+            features = payload_to_features({"channels": channels, "imu": imu})
+            if not features:
+                continue
+            X.append(features)
+            y.append(label)
+
+        if not X:
+            raise ValueError("Google Sheets dataset has no usable samples")
+        if len(set(y)) < 2:
+            raise ValueError("Google Sheets dataset must contain at least two gesture classes")
+        return X, y
+
     def retrain(
         self,
-        dataset_path: str | Path,
+        dataset_path: str | Path = None,
         model_type: str = "knn",
         test_size: float = 0.2,
         random_state: int = 42,
+        google_credentials_path: str = None,
+        google_spreadsheet_id: str = None,
     ) -> dict:
+        """
+        Retrain the model with the given dataset.
+
+        Args:
+            dataset_path: Local CSV dataset path
+            model_type: Type of model to train
+            test_size: Test set fraction
+            random_state: Random seed
+            google_credentials_path: Google Sheets credentials path
+            google_spreadsheet_id: Google Sheets ID
+        """
         model_type = (model_type or "knn").lower()
         if model_type not in MODEL_REGISTRY:
             raise ValueError(
@@ -199,7 +261,19 @@ class MLService:
                 f"Choose one of: {sorted(MODEL_REGISTRY.keys())}"
             )
 
-        X, y = self._load_dataset(dataset_path)
+        # Load from Google Sheets if credentials provided, otherwise from local CSV
+        if google_credentials_path and google_spreadsheet_id:
+            print("📊 Loading dataset from Google Sheets...")
+            X, y = self._load_dataset_from_google_sheets(
+                google_credentials_path, google_spreadsheet_id
+            )
+        elif dataset_path:
+            print(f"📊 Loading dataset from {dataset_path}...")
+            X, y = self._load_dataset(dataset_path)
+        else:
+            raise ValueError(
+                "Either dataset_path or (google_credentials_path and google_spreadsheet_id) must be provided"
+            )
 
         counts = Counter(y)
         n_samples = len(y)

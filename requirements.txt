@@ -12,3 +12,7 @@ pytest>=7.4
 black>=23.7
 isort>=5.12
 flake8>=6.1
+google-auth>=2.25
+google-auth-oauthlib>=1.1
+google-auth-httplib2>=0.2
+gspread>=5.11
