@@ -1,28 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-import math
 from pathlib import Path
 
-import joblib
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
-
-from .dataset_loader import load_dataset, load_dataset_from_google_sheets
-from .evaluate_model import evaluate_model
-
-MODEL_REGISTRY = {
-    "knn": lambda random_state: KNeighborsClassifier(n_neighbors=3),
-    "decision_tree": lambda random_state: DecisionTreeClassifier(
-        max_depth=5, random_state=random_state
-    ),
-    "random_forest": lambda random_state: RandomForestClassifier(
-        n_estimators=20, max_depth=6, random_state=random_state
-    ),
-}
+from app.services.ml_service import MODEL_REGISTRY, MLService
 
 
 def build_model(model_type: str, random_state: int):
@@ -41,75 +22,18 @@ def train_and_save(
     google_credentials_path: str = None,
     google_spreadsheet_id: str = None,
 ):
-    """
-    Train and save a gesture recognition model.
-
-    Args:
-        dataset_path: Path to local CSV dataset
-        model_path: Path to save the trained model
-        model_type: Type of model to train
-        test_size: Test set fraction
-        random_state: Random seed
-        google_credentials_path: Path to Google credentials JSON or the complete
-            JSON document
-        google_spreadsheet_id: Google Sheets spreadsheet ID
-
-    Returns:
-        Dictionary with training metrics
-    """
-    # Load dataset from Google Sheets if credentials provided, otherwise from local CSV
-    if google_credentials_path and google_spreadsheet_id:
-        print("📊 Loading dataset from Google Sheets...")
-        X, y, _ = load_dataset_from_google_sheets(
-            google_credentials_path, google_spreadsheet_id
-        )
-    elif dataset_path:
-        print(f"📊 Loading dataset from {dataset_path}...")
-        X, y, _ = load_dataset(dataset_path)
-    else:
-        raise ValueError(
-            "Either dataset_path or (google_credentials_path and google_spreadsheet_id) must be provided"
-        )
-
-    if len(set(y)) < 2:
-        raise ValueError("Dataset must contain at least two gesture classes")
-
-    counts = Counter(y)
-    n_samples = len(y)
-    n_classes = len(counts)
-    n_test = math.ceil(test_size * n_samples)
-    n_train = n_samples - n_test
-    can_split = (
-        n_samples >= 5
-        and min(counts.values()) >= 2
-        and n_test >= n_classes
-        and n_train >= n_classes
+    """Share the web trainer's feature pipeline and persisted evaluation artifacts."""
+    service = MLService(model_path, allow_missing=True)
+    metrics = service.retrain(
+        dataset_path=dataset_path,
+        model_type=model_type,
+        test_size=test_size,
+        random_state=random_state,
+        google_credentials_path=google_credentials_path,
+        google_spreadsheet_id=google_spreadsheet_id,
     )
-
-    if can_split:
-        X_train, X_test, y_train, y_test = train_test_split(
-            X,
-            y,
-            test_size=test_size,
-            random_state=random_state,
-            stratify=y,
-        )
-    else:
-        X_train, X_test, y_train, y_test = X, X, y, y
-
-    model = build_model(model_type, random_state)
-    model.fit(X_train, y_train)
-    accuracy, report = evaluate_model(model, X_test, y_test)
-
-    model_path = Path(model_path)
-    model_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, model_path)
-
-    return {
-        "accuracy": accuracy,
-        "report": report,
-        "model_path": str(model_path),
-    }
+    # Preserve the command-line helper's existing structured report contract.
+    return {**metrics, "report": metrics["classification_report"]}
 
 
 def main():

@@ -7,7 +7,7 @@ import threading
 from collections import Counter
 from pathlib import Path
 
-from app.services.google_sheets_service import GoogleSheetsService
+from app.services.google_sheets_service import DatasetStorageError, GoogleSheetsService
 
 HEADER = ["gesture", "timestamp", "channels", "imu"]
 
@@ -34,6 +34,9 @@ class DatasetRecorder:
         self._lock = threading.RLock()
         self.use_google_sheets = False
         self.google_sheets = None
+        self._google_credentials = google_credentials_path
+        self._google_id = google_spreadsheet_id
+        self._cached_rows = None
 
         # Initialize Google Sheets if credentials provided
         if google_credentials_path and google_spreadsheet_id:
@@ -46,7 +49,7 @@ class DatasetRecorder:
             except Exception as e:
                 print(
                     f"⚠ Google Sheets initialization failed: {str(e)}"
-                    " - Falling back to local CSV storage"
+                    " - Dataset operations will retry the configured Google Sheet"
                 )
                 self.use_google_sheets = False
 
@@ -87,7 +90,8 @@ class DatasetRecorder:
             return
 
         raise ValueError(
-            f"Dataset file has an invalid CSV structure and cannot be repaired: {self.dataset_path}"
+            "Dataset file has an invalid CSV structure and cannot be repaired: "
+            f"{self.dataset_path}"
         )
 
     def _flush_handle(self, handle) -> None:
@@ -143,28 +147,19 @@ class DatasetRecorder:
         return row
 
     def save_sample(self, data: dict, label: str) -> None:
-        self._ensure_file()
-        row = self._normalize_row(data, label)
-        with self._lock:
-            # Save to Google Sheets if available
-            if self.use_google_sheets and self.google_sheets:
-                self.google_sheets.append_row(row)
-
-            # Also save locally as backup
-            with self.dataset_path.open("a", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=HEADER)
-                writer.writerow(row)
-                self._flush_handle(handle)
+        self.save_samples([data], label)
 
     def save_samples(self, samples: list[dict], label: str) -> int:
         self._ensure_file()
         rows = [self._normalize_row(sample, label) for sample in samples]
         with self._lock:
-            # Save to Google Sheets if available
-            if self.use_google_sheets and self.google_sheets:
+            sheets = self._sheets()
+            if sheets:
+                existing = sheets.get_all_rows()
                 self.google_sheets.append_rows(rows)
+                self._mirror_rows(existing + rows)
+                return len(rows)
 
-            # Also save locally as backup
             with self.dataset_path.open("a", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=HEADER)
                 for row in rows:
@@ -183,144 +178,112 @@ class DatasetRecorder:
         except Exception:
             return {}
 
+    def _sheets(self):
+        if not self.google_sheets and self._google_credentials and self._google_id:
+            try:
+                self.google_sheets = GoogleSheetsService(
+                    self._google_credentials, self._google_id
+                )
+                self.use_google_sheets = True
+            except Exception as exc:
+                raise DatasetStorageError(
+                    "Google Sheets is configured but unavailable. Check credentials, "
+                    "sheet sharing, and the connection, then retry."
+                ) from exc
+        return self.google_sheets if self.use_google_sheets else None
+
+    def _mirror_rows(self, rows: list[dict]) -> None:
+        self._rewrite_rows_with_header_unlocked(
+            [[row.get(key, "") for key in HEADER] for row in rows]
+        )
+        self._cached_rows = rows
+
+    def read_rows(self, *, refresh: bool = True) -> list[dict]:
+        """Use one authoritative source for editing, statistics, and training."""
+        with self._lock:
+            sheets = self._sheets()
+            if sheets:
+                if refresh or self._cached_rows is None:
+                    self._mirror_rows(sheets.get_all_rows())
+                return [dict(row) for row in self._cached_rows]
+            self._ensure_file_unlocked()
+            with self.dataset_path.open(
+                "r", newline="", encoding="utf-8-sig"
+            ) as handle:
+                return list(csv.DictReader(handle))
+
     def list_rows(
-        self,
-        *,
-        limit: int = 50,
-        offset: int = 0,
-        label: str | None = None,
+        self, *, limit: int = 50, offset: int = 0, label: str | None = None
     ) -> dict:
-        self._ensure_file()
         limit = max(1, min(int(limit), 200))
         offset = max(0, int(offset))
-
-        with self._lock:
-            with self.dataset_path.open("r", newline="", encoding="utf-8") as handle:
-                reader = csv.DictReader(handle)
-                rows = []
-                total = 0
-                for row in reader:
-                    if not row:
-                        continue
-                    gesture = row.get("gesture")
-                    if label is not None and gesture != label:
-                        continue
-
-                    if total >= offset and len(rows) < limit:
-                        rows.append(
-                            {
-                                "gesture": gesture,
-                                "timestamp": row.get("timestamp"),
-                                "channels": self._parse_json_cell(row.get("channels")),
-                                "imu": self._parse_json_cell(row.get("imu")),
-                            }
-                        )
-                    total += 1
-
-        return {
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "rows": rows,
-        }
+        all_rows = [
+            row
+            for row in self.read_rows()
+            if label is None or row.get("gesture", "") == label
+        ]
+        rows = [
+            {
+                "gesture": row.get("gesture", ""),
+                "timestamp": row.get("timestamp"),
+                "channels": self._parse_json_cell(row.get("channels")),
+                "imu": self._parse_json_cell(row.get("imu")),
+            }
+            for row in all_rows[offset : offset + limit]
+        ]
+        return {"total": len(all_rows), "limit": limit, "offset": offset, "rows": rows}
 
     def _rewrite(self, transform) -> int:
-        self._ensure_file()
-        tmp_path = self.dataset_path.with_suffix(self.dataset_path.suffix + ".tmp")
-
-        changed = 0
         with self._lock:
-            with self.dataset_path.open("r", newline="", encoding="utf-8") as inp:
-                reader = csv.DictReader(inp)
-                with tmp_path.open("w", newline="", encoding="utf-8") as out:
-                    writer = csv.DictWriter(out, fieldnames=HEADER)
-                    writer.writeheader()
-                    for row in reader:
-                        if not row:
-                            continue
-                        new_row = transform(row)
-                        if new_row is None:
-                            changed += 1
-                            continue
-                        if new_row is not row:
-                            changed += 1
-                        writer.writerow(
-                            {
-                                "gesture": new_row.get("gesture", ""),
-                                "timestamp": new_row.get("timestamp", ""),
-                                "channels": new_row.get("channels", "{}"),
-                                "imu": new_row.get("imu", "{}"),
-                            }
-                        )
-                    self._flush_handle(out)
-            tmp_path.replace(self.dataset_path)
-
-        return changed
+            sheets = self._sheets()
+            if sheets:
+                changed, rows = sheets.rewrite(transform)
+            else:
+                rows = []
+                changed = 0
+                for row in self.read_rows():
+                    result = transform(row)
+                    if result != row:
+                        changed += 1
+                    if result is not None:
+                        rows.append(result)
+            self._mirror_rows(rows)
+            return changed
 
     def rename_label(self, from_label: str, to_label: str) -> int:
-        from_label = (from_label or "")
         to_label = self._normalize_label(to_label)
-
-        def transform(row: dict):
-            if row.get("gesture") != from_label:
-                return row
-            new_row = dict(row)
-            new_row["gesture"] = to_label
-            return new_row
-
-        return self._rewrite(transform)
+        return self._rewrite(
+            lambda row: (
+                {**row, "gesture": to_label}
+                if row.get("gesture", "") == from_label
+                else row
+            )
+        )
 
     def delete_label(self, label: str) -> int:
-        label = (label or "")
-
-        def transform(row: dict):
-            if row.get("gesture") == label:
-                return None
-            return row
-
-        return self._rewrite(transform)
+        return self._rewrite(
+            lambda row: None if row.get("gesture", "") == label else row
+        )
 
     def delete_empty_labels(self) -> int:
-        return self.delete_label("")
+        return self._rewrite(
+            lambda row: None if not row.get("gesture", "").strip() else row
+        )
 
     def clear(self) -> None:
-        self._ensure_file()
-        with self._lock:
-            with self.dataset_path.open("w", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=HEADER)
-                writer.writeheader()
-                self._flush_handle(handle)
+        self._rewrite(lambda row: None)
 
-    def stats(self) -> dict:
-        self._ensure_file()
-        with self._lock:
-            # Try to get stats from Google Sheets first
-            if self.use_google_sheets and self.google_sheets:
-                try:
-                    all_rows = self.google_sheets.get_all_rows()
-                    gestures = [row.get("gesture", "") for row in all_rows if row]
-                    counts = Counter(gestures)
-                    return {
-                        "total": sum(counts.values()),
-                        "by_label": dict(counts),
-                        "path": f"Google Sheets ({self.google_sheets.spreadsheet_id})",
-                        "storage": "google_sheets",
-                    }
-                except Exception:
-                    pass  # Fall back to local CSV
-
-            # Fall back to local CSV
-            with self.dataset_path.open("r", newline="", encoding="utf-8") as handle:
-                reader = csv.DictReader(handle)
-                gestures = [
-                    (row.get("gesture", "") or "")
-                    for row in reader
-                    if row and row.get("gesture") is not None
-                ]
-        counts = Counter(gestures)
+    def stats(self, *, refresh: bool = True) -> dict:
+        counts = Counter(
+            row.get("gesture", "") for row in self.read_rows(refresh=refresh)
+        )
         return {
             "total": sum(counts.values()),
             "by_label": dict(counts),
-            "path": str(self.dataset_path),
-            "storage": "local_csv",
+            "path": (
+                f"Google Sheets ({self.google_sheets.spreadsheet_id})"
+                if self.use_google_sheets
+                else str(self.dataset_path)
+            ),
+            "storage": "google_sheets" if self.use_google_sheets else "local_csv",
         }

@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 import os
 
+
+class DatasetStorageError(RuntimeError):
+    """The configured dataset storage could not complete an operation."""
+
+
 try:
     import gspread
     from google.oauth2.service_account import Credentials
@@ -39,6 +44,7 @@ class GoogleSheetsService:
         self.spreadsheet_id = spreadsheet_id
         self.credentials_source = credentials_source
         self.client = None
+        self.spreadsheet = None
         self.worksheet = None
         self._initialize_client()
 
@@ -81,6 +87,7 @@ class GoogleSheetsService:
         """Get existing worksheet or create new one."""
         try:
             spreadsheet = self.client.open_by_key(self.spreadsheet_id)
+            self.spreadsheet = spreadsheet
             # Try to get existing worksheet
             try:
                 self.worksheet = spreadsheet.worksheet("gesture_data")
@@ -89,17 +96,17 @@ class GoogleSheetsService:
                 self.worksheet = spreadsheet.add_worksheet(
                     title="gesture_data", rows=1000, cols=4
                 )
-                self._write_header()
+            self._write_header()
         except Exception as e:
-            raise RuntimeError(f"Failed to access Google Sheet: {str(e)}")
+            raise DatasetStorageError(
+                "Cannot access Google Sheets. Check credentials, sharing permissions, "
+                "and the connection, then retry."
+            ) from e
 
     def _write_header(self) -> None:
         """Write header row if sheet is empty."""
-        try:
-            if len(self.worksheet.get_all_values()) == 0:
-                self.worksheet.append_row(self.HEADER)
-        except Exception:
-            pass
+        if len(self.worksheet.get_all_values()) == 0:
+            self.worksheet.append_row(self.HEADER, value_input_option="RAW")
 
     def append_row(self, row_data: dict) -> bool:
         """
@@ -109,7 +116,7 @@ class GoogleSheetsService:
             row_data: Dictionary with keys matching HEADER
 
         Returns:
-            True if successful, False otherwise
+            True if successful; raises DatasetStorageError on failure
         """
         try:
             values = [
@@ -118,11 +125,12 @@ class GoogleSheetsService:
                 row_data.get("channels", ""),
                 row_data.get("imu", ""),
             ]
-            self.worksheet.append_row(values)
+            self.worksheet.append_row(values, value_input_option="RAW")
             return True
         except Exception as e:
-            print(f"Error appending row to Google Sheets: {str(e)}")
-            return False
+            raise DatasetStorageError(
+                "Could not save the sample to Google Sheets."
+            ) from e
 
     def append_rows(self, rows_data: list[dict]) -> int:
         """
@@ -144,11 +152,11 @@ class GoogleSheetsService:
                 ]
                 for row in rows_data
             ]
-            self.worksheet.append_rows(values)
+            if values:
+                self.worksheet.append_rows(values, value_input_option="RAW")
             return len(rows_data)
         except Exception as e:
-            print(f"Error appending rows to Google Sheets: {str(e)}")
-            return 0
+            raise DatasetStorageError("Could not save samples to Google Sheets.") from e
 
     def get_all_rows(self) -> list[dict]:
         """
@@ -158,26 +166,126 @@ class GoogleSheetsService:
             List of dictionaries representing rows
         """
         try:
-            all_values = self.worksheet.get_all_values()
-            if not all_values:
-                return []
+            return [row for _, row in self._indexed_rows()]
+        except Exception as e:
+            if isinstance(e, DatasetStorageError):
+                raise
+            raise DatasetStorageError(
+                "Could not read Google Sheets. Check the connection and sheet access, "
+                "then refresh again."
+            ) from e
 
-            # Skip header row
-            rows = []
-            for row_values in all_values[1:]:
-                if len(row_values) >= 4:
-                    rows.append(
+    def _indexed_rows(self) -> list[tuple[int, dict]]:
+        values = self.worksheet.get_all_values()
+        indexed = [
+            (index, cells) for index, cells in enumerate(values, 1) if any(cells)
+        ]
+        if not indexed:
+            return []
+        first_cells = indexed[0][1]
+        header = [str(cell).lstrip("\ufeff").strip() for cell in first_cells[:4]]
+        if header == self.HEADER:
+            data = indexed[1:]
+        else:
+            # Some existing sheets were populated without a header. Do not lose
+            # their first sample or shift the physical row numbers used by edits.
+            try:
+                channels = json.loads(first_cells[2])
+            except (IndexError, ValueError, TypeError):
+                channels = None
+            if not isinstance(channels, (dict, list)):
+                raise DatasetStorageError(
+                    "Unrecognized gesture_data sheet layout. Expected columns: "
+                    "gesture, timestamp, channels, imu (optional)."
+                )
+            data = indexed
+        # Sheets omits trailing empty cells, including the optional IMU column.
+        return [
+            (index, dict(zip(self.HEADER, (cells + [""] * 4)[:4])))
+            for index, cells in data
+        ]
+
+    def rewrite(self, transform) -> tuple[int, list[dict]]:
+        """Edit only matching rows in one atomic Sheets batch; preserve other cells."""
+        try:
+            requests = []
+            kept = []
+            changed = 0
+            # Bottom-up deletion keeps row indices valid within the batch.
+            for index, row in reversed(self._indexed_rows()):
+                result = transform(row)
+                if result is None:
+                    if index == 1 and not kept:
+                        # Google forbids deleting the final grid row. Clearing
+                        # this last headerless sample leaves an empty valid sheet.
+                        requests.append(
+                            {
+                                "updateCells": {
+                                    "range": {
+                                        "sheetId": self.worksheet.id,
+                                        "startRowIndex": 0,
+                                        "endRowIndex": 1,
+                                    },
+                                    "rows": [],
+                                    "fields": "userEnteredValue",
+                                }
+                            }
+                        )
+                        changed += 1
+                        continue
+                    requests.append(
                         {
-                            "gesture": row_values[0],
-                            "timestamp": row_values[1],
-                            "channels": row_values[2],
-                            "imu": row_values[3],
+                            "deleteDimension": {
+                                "range": {
+                                    "sheetId": self.worksheet.id,
+                                    "dimension": "ROWS",
+                                    "startIndex": index - 1,
+                                    "endIndex": index,
+                                }
+                            }
                         }
                     )
-            return rows
+                    changed += 1
+                else:
+                    kept.append(result)
+                    if result != row:
+                        requests.append(
+                            {
+                                "updateCells": {
+                                    "range": {
+                                        "sheetId": self.worksheet.id,
+                                        "startRowIndex": index - 1,
+                                        "endRowIndex": index,
+                                        "startColumnIndex": 0,
+                                        "endColumnIndex": 1,
+                                    },
+                                    "rows": [
+                                        {
+                                            "values": [
+                                                {
+                                                    "userEnteredValue": {
+                                                        "stringValue": result[
+                                                            "gesture"
+                                                        ],
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "fields": "userEnteredValue",
+                                }
+                            }
+                        )
+                        changed += 1
+            if requests:
+                self.spreadsheet.batch_update({"requests": requests})
+            return changed, list(reversed(kept))
         except Exception as e:
-            print(f"Error reading from Google Sheets: {str(e)}")
-            return []
+            if isinstance(e, DatasetStorageError):
+                raise
+            raise DatasetStorageError(
+                "Could not edit Google Sheets. Check Editor access and retry."
+            ) from e
 
     def get_rows_by_gesture(self, gesture: str) -> list[dict]:
         """
@@ -189,27 +297,17 @@ class GoogleSheetsService:
         Returns:
             List of dictionaries representing rows for the gesture
         """
-        try:
-            all_rows = self.get_all_rows()
-            return [row for row in all_rows if row.get("gesture") == gesture]
-        except Exception as e:
-            print(f"Error filtering rows: {str(e)}")
-            return []
+        return [row for row in self.get_all_rows() if row.get("gesture") == gesture]
 
     def clear_worksheet(self) -> bool:
         """
         Clear all data from the worksheet (keeps header).
 
         Returns:
-            True if successful, False otherwise
+            True if successful; raises DatasetStorageError on failure
         """
-        try:
-            self.worksheet.clear()
-            self._write_header()
-            return True
-        except Exception as e:
-            print(f"Error clearing worksheet: {str(e)}")
-            return False
+        self.rewrite(lambda row: None)
+        return True
 
     def get_row_count(self) -> int:
         """
@@ -218,11 +316,7 @@ class GoogleSheetsService:
         Returns:
             Number of data rows
         """
-        try:
-            all_values = self.worksheet.get_all_values()
-            return max(0, len(all_values) - 1)  # Subtract header
-        except Exception:
-            return 0
+        return len(self.get_all_rows())
 
     @staticmethod
     def is_available() -> bool:

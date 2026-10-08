@@ -1,21 +1,27 @@
 ﻿from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
+import threading
+import time
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 import joblib
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
+
+from app.services.model_metrics import classification_metrics, confusion_matrix_png
 
 
 def _as_float(value):
@@ -24,7 +30,8 @@ def _as_float(value):
     if isinstance(value, bool):
         return None
     try:
-        return float(value)
+        number = float(value)
+        return number if math.isfinite(number) else None
     except Exception:
         return None
 
@@ -70,6 +77,8 @@ class MLService:
         self.model_path = Path(model_path)
         self.allow_missing = allow_missing
         self.model = None
+        self._lock = threading.RLock()
+        self.reports_path = self.model_path.with_suffix(".reports")
         self._predict_mode = "dict"  # "dict" (new) or "legacy" (5-sensor vector)
         self.load()
 
@@ -96,9 +105,10 @@ class MLService:
         return self.model is not None
 
     def reset(self, delete_file: bool = True) -> None:
-        self.model = None
-        if delete_file and self.model_path.exists():
-            self.model_path.unlink(missing_ok=True)
+        with self._lock:
+            self.model = None
+            if delete_file:
+                self.model_path.unlink(missing_ok=True)
 
     def predict(self, payload: dict) -> str | None:
         if self.model is None:
@@ -134,9 +144,9 @@ class MLService:
                 if any(v is None for v in vec[:3]):
                     return None
 
-                arr = np.array([0.0 if v is None else v for v in vec], dtype=float).reshape(
-                    1, -1
-                )
+                arr = np.array(
+                    [0.0 if v is None else v for v in vec], dtype=float
+                ).reshape(1, -1)
                 prediction = self.model.predict(arr)
 
             if len(prediction) == 0:
@@ -146,93 +156,46 @@ class MLService:
             return None
 
     def _load_dataset(self, dataset_path: str | Path):
-        dataset_path = Path(dataset_path)
-        if not dataset_path.is_file():
-            raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+        with Path(dataset_path).open("r", newline="", encoding="utf-8-sig") as handle:
+            return self._rows_to_dataset(list(csv.DictReader(handle)))
 
-        X: list[dict[str, float]] = []
-        y: list[str] = []
-
-        with dataset_path.open("r", newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            for row in reader:
-                if not row:
-                    continue
-                label = (row.get("gesture") or "").strip()
-                if not label:
-                    continue
-
-                channels_raw = row.get("channels") or "{}"
-                imu_raw = row.get("imu") or "{}"
+    def _rows_to_dataset(self, rows: list[dict], *, require_two_classes=True):
+        X, y = [], []
+        names = ("thumb", "index", "middle", "ring", "little")
+        for row in rows:
+            label = (row.get("gesture") or "").strip()
+            if not label:
+                continue
+            payload = {}
+            for key in ("channels", "imu"):
+                raw = row.get(key) or "{}"
                 try:
-                    channels = json.loads(channels_raw)
-                except Exception:
-                    channels = {}
-                try:
-                    imu = json.loads(imu_raw)
-                except Exception:
-                    imu = {}
-
-                features = payload_to_features({"channels": channels, "imu": imu})
-                if not features:
-                    continue
+                    payload[key] = json.loads(raw) if isinstance(raw, str) else raw
+                except (ValueError, TypeError):
+                    payload[key] = {}
+            # Retain support for original CSVs with five direct feature columns.
+            if "channels" not in row:
+                payload["channels"] = {
+                    f"s{i}": row.get(f"s{i}", row.get(name))
+                    for i, name in enumerate(names, start=1)
+                }
+            features = payload_to_features(payload)
+            if features:
                 X.append(features)
                 y.append(label)
-
         if not X:
             raise ValueError("Dataset has no usable samples")
-        if len(set(y)) < 2:
+        if require_two_classes and len(set(y)) < 2:
             raise ValueError("Dataset must contain at least two gesture classes")
         return X, y
 
     def _load_dataset_from_google_sheets(
         self, credentials_path: str, spreadsheet_id: str
     ):
-        """Load dataset from Google Sheets."""
-        try:
-            from app.services.google_sheets_service import GoogleSheetsService
-        except ImportError:
-            raise RuntimeError(
-                "Google Sheets libraries not installed. "
-                "Install with: pip install gspread google-auth google-auth-oauthlib"
-            )
+        from app.services.google_sheets_service import GoogleSheetsService
 
-        google_sheets = GoogleSheetsService(credentials_path, spreadsheet_id)
-        rows = google_sheets.get_all_rows()
-
-        if not rows:
-            raise ValueError("No data found in Google Sheets")
-
-        X: list[dict[str, float]] = []
-        y: list[str] = []
-
-        for row in rows:
-            label = (row.get("gesture", "") or "").strip()
-            if not label:
-                continue
-
-            channels_raw = row.get("channels") or "{}"
-            imu_raw = row.get("imu") or "{}"
-            try:
-                channels = json.loads(channels_raw)
-            except Exception:
-                channels = {}
-            try:
-                imu = json.loads(imu_raw)
-            except Exception:
-                imu = {}
-
-            features = payload_to_features({"channels": channels, "imu": imu})
-            if not features:
-                continue
-            X.append(features)
-            y.append(label)
-
-        if not X:
-            raise ValueError("Google Sheets dataset has no usable samples")
-        if len(set(y)) < 2:
-            raise ValueError("Google Sheets dataset must contain at least two gesture classes")
-        return X, y
+        sheets = GoogleSheetsService(credentials_path, spreadsheet_id)
+        return self._rows_to_dataset(sheets.get_all_rows())
 
     def retrain(
         self,
@@ -242,6 +205,8 @@ class MLService:
         random_state: int = 42,
         google_credentials_path: str = None,
         google_spreadsheet_id: str = None,
+        rows: list[dict] | None = None,
+        dataset_source: str | None = None,
     ) -> dict:
         """
         Retrain the model with the given dataset.
@@ -254,7 +219,10 @@ class MLService:
             google_credentials_path: Google Sheets credentials path
             google_spreadsheet_id: Google Sheets ID
         """
-        model_type = (model_type or "knn").lower()
+        started = time.perf_counter()
+        model_type = (model_type or "knn").strip().lower()
+        if not 0 < test_size < 1:
+            raise ValueError("test_size must be between 0 and 1")
         if model_type not in MODEL_REGISTRY:
             raise ValueError(
                 f"Unsupported model type: {model_type}. "
@@ -262,7 +230,9 @@ class MLService:
             )
 
         # Load from Google Sheets if credentials provided, otherwise from local CSV
-        if google_credentials_path and google_spreadsheet_id:
+        if rows is not None:
+            X, y = self._rows_to_dataset(rows)
+        elif google_credentials_path and google_spreadsheet_id:
             print("📊 Loading dataset from Google Sheets...")
             X, y = self._load_dataset_from_google_sheets(
                 google_credentials_path, google_spreadsheet_id
@@ -272,7 +242,8 @@ class MLService:
             X, y = self._load_dataset(dataset_path)
         else:
             raise ValueError(
-                "Either dataset_path or (google_credentials_path and google_spreadsheet_id) must be provided"
+                "Provide dataset_path or both google_credentials_path "
+                "and google_spreadsheet_id"
             )
 
         counts = Counter(y)
@@ -305,23 +276,169 @@ class MLService:
                 ("clf", MODEL_REGISTRY[model_type](random_state)),
             ]
         )
+        if model_type == "knn":
+            pipeline.set_params(clf__n_neighbors=min(3, len(X_train)))
         pipeline.fit(X_train, y_train)
 
         y_pred = pipeline.predict(X_test)
-        accuracy = float(accuracy_score(y_test, y_pred))
-        report = classification_report(y_test, y_pred, zero_division=0)
+        metrics = classification_metrics(y_test, y_pred, sorted(set(y)))
+        metrics.update(
+            {
+                "run_id": uuid4().hex,
+                "trained_at": datetime.now(timezone.utc).isoformat(),
+                "model_path": str(self.model_path),
+                "samples": n_samples,
+                "train_samples": len(y_train),
+                "test_samples": len(y_test) if can_split else 0,
+                "feature_count": len(pipeline.named_steps["vectorizer"].feature_names_),
+                "model_type": model_type,
+                "dataset_source": dataset_source
+                or ("google_sheets" if google_spreadsheet_id else "local_csv"),
+                "class_distribution": dict(counts),
+                "random_state": random_state,
+                "test_size": test_size,
+                "training_seconds": time.perf_counter() - started,
+                "evaluation_kind": "holdout" if can_split else "training_only",
+                "evaluation_label": (
+                    "Held-out test set" if can_split else "Training data only"
+                ),
+                "warning": (
+                    None
+                    if can_split
+                    else (
+                        "Too few samples per class for the requested stratified split. "
+                        "These scores and this matrix use training data and do not "
+                        "measure "
+                        "generalization. Collect more samples per class and retrain."
+                    )
+                ),
+            }
+        )
+        # Embed the exact evaluation in the model, so metrics and model stay paired.
+        pipeline.training_metrics_ = metrics
+        with self._lock:
+            self.model_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.model_path.with_name(
+                self.model_path.name + "." + metrics["run_id"] + ".tmp"
+            )
+            try:
+                joblib.dump(pipeline, temporary)
+                self._save_report(metrics)
+                temporary.replace(self.model_path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            self.model = pipeline
+            self._predict_mode = "dict"
+        return metrics
 
-        self.model_path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(pipeline, self.model_path)
-        self.model = pipeline
-        self._predict_mode = "dict"
+    def _save_report(self, metrics: dict) -> None:
+        self.reports_path.mkdir(parents=True, exist_ok=True)
+        target = self.reports_path / (metrics["run_id"] + ".json")
+        temporary = target.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(metrics, indent=2, allow_nan=False), encoding="utf-8"
+        )
+        temporary.replace(target)
+        # Keep an exportable Matplotlib artifact for the ML project report.
+        png = self.reports_path / (metrics["run_id"] + ".png")
+        temporary_png = png.with_suffix(".png.tmp")
+        temporary_png.write_bytes(confusion_matrix_png(metrics))
+        temporary_png.replace(png)
 
-        return {
-            "accuracy": accuracy,
-            "report": report,
-            "model_path": str(self.model_path),
-            "samples": n_samples,
-            "classes": sorted(set(y)),
-            "feature_count": len(pipeline.named_steps["vectorizer"].feature_names_),
-            "model_type": model_type,
-        }
+    def performance(self, recorder) -> dict:
+        with self._lock:
+            # Refresh from disk also picks up models trained through the CLI.
+            if self.model_path.exists():
+                self.load()
+            else:
+                self.model = None
+            current = getattr(self.model, "training_metrics_", None)
+            message = None
+            if self.model is not None and current is None:
+                try:
+                    current = self._evaluate_existing(recorder)
+                    if not (self.reports_path / (current["run_id"] + ".json")).exists():
+                        self._save_report(current)
+                except (ValueError, FileNotFoundError) as exc:
+                    message = f"This older model has no saved evaluation. {exc}"
+            runs = []
+            for path in self.reports_path.glob("*.json"):
+                try:
+                    runs.append(json.loads(path.read_text(encoding="utf-8")))
+                except (OSError, ValueError):
+                    continue
+            if current:
+                runs = [run for run in runs if run["run_id"] != current["run_id"]]
+                runs.append(current)
+            runs.sort(key=lambda run: run["trained_at"], reverse=True)
+            return {
+                "model_loaded": self.loaded,
+                "active_run_id": current["run_id"] if current else None,
+                "runs": runs,
+                "message": message,
+                "refreshed_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+    def _evaluate_existing(self, recorder) -> dict:
+        X, y = self._rows_to_dataset(recorder.read_rows(), require_two_classes=False)
+        fingerprint = hashlib.sha256(self.model_path.read_bytes())
+        fingerprint.update(json.dumps([X, y], sort_keys=True).encode("utf-8"))
+        if self._predict_mode == "dict":
+            predictions = self.model.predict(X)
+        else:
+            names = ("thumb", "index", "middle", "ring", "little")
+            vectors = [
+                [
+                    row.get(f"ch:s{i}", row.get(f"ch:{name}", 0.0))
+                    for i, name in enumerate(names, start=1)
+                ]
+                for row in X
+            ]
+            predictions = self.model.predict(vectors)
+        metrics = classification_metrics(
+            y, predictions, sorted(set(y) | set(map(str, predictions)))
+        )
+        classifier = (
+            self.model.named_steps.get("clf")
+            if isinstance(self.model, Pipeline)
+            else self.model
+        )
+        metrics.update(
+            {
+                "run_id": fingerprint.hexdigest()[:32],
+                # Original training time and split cannot be recovered from old pickles.
+                "trained_at": datetime.fromtimestamp(
+                    self.model_path.stat().st_mtime, timezone.utc
+                ).isoformat(),
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "model_type": type(classifier).__name__,
+                "samples": len(y),
+                "train_samples": None,
+                "test_samples": None,
+                "feature_count": getattr(classifier, "n_features_in_", None),
+                "class_distribution": dict(Counter(y)),
+                "dataset_source": (
+                    "google_sheets" if recorder.use_google_sheets else "local_csv"
+                ),
+                "evaluation_kind": "current_dataset",
+                "evaluation_label": "Existing model on current dataset",
+                "warning": "The original test split was not saved. This evaluates "
+                "the existing model "
+                "on the current dataset, which may include its training samples. "
+                "It is not a held-out test score. Retrain to save a "
+                "reproducible evaluation.",
+            }
+        )
+        return metrics
+
+    def get_report(self, run_id: str, recorder) -> dict:
+        # Only identifiers generated here are accepted as filenames.
+        if len(run_id) != 32 or any(char not in "0123456789abcdef" for char in run_id):
+            raise FileNotFoundError("Evaluation not found")
+        path = self.reports_path / (run_id + ".json")
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
+        current = getattr(self.model, "training_metrics_", None)
+        if current and current["run_id"] == run_id:
+            return current
+        raise FileNotFoundError("Evaluation not found")

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Performance</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', path='css/performance.css') }}" />
+  </head>
+  <body class="performance-page">
+    <div id="app">
+      <header class="header">
+        <h1>Model Performance</h1>
+        <div class="actions">
+          <a class="btn" href="/">Home</a>
+          <a class="btn" href="/interpret">Interpretation</a>
+          <a class="btn" href="/collect">Data Collection</a>
+        </div>
+      </header>
+      <main class="panels">
+        <section class="panel active">
+          <div class="card">
+            <h2>Trained Models</h2>
+            <p class="hint">Saved results refresh when this page opens, when you return to it, and when you click REFRESH. Train a new model from Data Collection.</p>
+            <div class="actions"><button class="btn" id="refresh-metrics">REFRESH</button></div>
+            <p id="metrics-status" role="status" aria-live="polite">Loading performance metrics...</p>
+            <label for="training-run">Training / evaluation run</label>
+            <select id="training-run" disabled></select>
+          </div>
+          <div id="evaluation" hidden>
+            <div class="grid">
+              <div class="card">
+                <h3>Performance Metrics</h3>
+                <ul>
+                  <li>Accuracy: <strong id="metric-accuracy">-</strong></li>
+                  <li>Precision (macro): <strong id="metric-precision">-</strong></li>
+                  <li>Recall (macro): <strong id="metric-recall">-</strong></li>
+                  <li>F1 score (macro): <strong id="metric-f1">-</strong></li>
+                  <li>F1 score (weighted): <strong id="metric-weighted-f1">-</strong></li>
+                </ul>
+                <p class="hint">Macro averages treat every gesture equally. Weighted F1 accounts for the number of evaluated samples per gesture.</p>
+              </div>
+              <div class="card">
+                <h3>Evaluation Details</h3>
+                <ul id="evaluation-details"></ul>
+                <p id="evaluation-warning" role="note" class="hint"></p>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Per-label Classification Report</h3>
+              <div class="table-scroll">
+                <table>
+                  <caption>Precision, recall, F1 score, and support (evaluated sample count)</caption>
+                  <thead><tr><th scope="col">Label</th><th scope="col">Precision</th><th scope="col">Recall</th><th scope="col">F1 score</th><th scope="col">Support</th></tr></thead>
+                  <tbody id="classification-rows"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Confusion Matrix (Matplotlib)</h3>
+              <p class="hint">Rows are true labels; columns are predicted labels. Diagonal cells count correct predictions.</p>
+              <p id="matrix-status" role="status"></p>
+              <img id="confusion-matrix" alt="Confusion matrix: true labels by predicted labels" hidden />
+              <div class="actions"><a class="btn" id="download-matrix" download="confusion-matrix.png">DOWNLOAD PNG</a></div>
+              <div class="table-scroll">
+                <table id="matrix-table"><caption>Confusion matrix sample counts</caption><thead></thead><tbody></tbody></table>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="{{ url_for('static', path='js/performance.js') }}"></script>
+  </body>
+</html>

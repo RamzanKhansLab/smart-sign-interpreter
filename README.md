@@ -19,7 +19,7 @@ Components:
 - Unified processing pipeline
 - Dataset recorder (CSV + Google Sheets)
 - Optional ML prediction service
-- Minimal Jinja2 tools (Interpretation + Data Collection)
+- Minimal Jinja2 tools (Interpretation + Data Collection + Model Performance)
 
 Data flow diagram:
 
@@ -299,3 +299,54 @@ python scripts/sync_google_sheets.py stats \
 ```bash
 pytest
 ```
+
+## Dataset editing and model performance
+
+When Google Sheets is configured, saving, label renaming/deletion, clearing,
+row previews, statistics, and training all use the `gesture_data` worksheet.
+Successful reads and edits update the local CSV backup. REFRESH reads the sheet
+again, including edits made directly in Google Sheets and rows without IMU data.
+Existing headerless sheets are supported without dropping the first sample.
+A failed sheet connection returns an error instead of reporting zero samples or
+silently editing only the backup. With no Sheets configuration, local CSV storage
+continues to work.
+
+Open **Model Performance** from Home, Data Collection, or Interpretation. The new
+page includes accuracy, macro precision/recall/F1, weighted F1, per-label scores
+and support, evaluation details, and a downloadable **Matplotlib confusion matrix**.
+Use the run selector to compare previous training results. Page reload, returning
+to the tab, and REFRESH load the latest saved results; they do not retrain the model.
+
+Every successful KNN, decision-tree, or random-forest training run saves its
+evaluation with the model and keeps JSON/PNG artifacts beside it. With the default
+model path, these are in `models/gesture_model.reports/`. Keep the model and this
+directory on persistent storage or back them up to retain history across a server
+replacement. Resetting the active model retains its historical evaluations.
+
+Training uses a reproducible stratified 80/20 split (seed 42) when class counts
+permit it. The feature vectorizer and scaler fit only the training portion. If a
+split is impossible, the page explicitly labels results **Training data only**.
+For older models without saved metrics, it evaluates the unchanged model on the
+current dataset and explicitly states that the original held-out split is unknown.
+For stronger ML validation, collect independent recording sessions: neighboring
+sensor readings from one recording can inflate a random-split score.
+
+The CLI uses the same training pipeline and also writes the report artifacts:
+
+```bash
+python -m ml.train_model --model-type random_forest
+python -m ml.retrain_model --force
+```
+
+Reinstall dependencies and restart the server after updating; Matplotlib is now
+included in both requirements files. Plotting uses its headless Agg renderer.
+
+Optional browser verification uses temporary data and an offline Sheets boundary:
+
+```bash
+pip install playwright
+python tests/browser_smoke.py
+```
+
+This check requires Google Chrome and covers capture/save, label edits, refresh and
+failure recovery, training history, PNG download, and desktop/mobile rendering.

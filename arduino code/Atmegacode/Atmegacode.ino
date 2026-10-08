@@ -3,8 +3,8 @@
 
 SoftwareSerial esp(2, 3); // RX=D2, TX=D3
 
-const char* SSID    = "sslg_wifi";
-const char* PASS    = "12345678";
+const char* SSID    = "Samsung a15 4g";
+const char* PASS    = "9764395279";
 const char* API_URL = "https://smart-sign-interpreter.onrender.com/api/sensor-data";
 
 bool wifiConnected    = false;

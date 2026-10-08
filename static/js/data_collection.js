@@ -15,6 +15,8 @@ const state = {
   lastBufferedFingerprint: null,
   labels: [],
   savePending: false,
+  rowsLoaded: false,
+  statsPending: false,
 };
 
 function setText(id, value) {
@@ -194,15 +196,23 @@ function getLabel() {
 }
 
 async function refreshStats() {
-  const res = await fetch("/api/dataset/stats");
-  if (!res.ok) {
-    setText("dataset-stats", "Failed to load dataset statistics.");
+  if (state.statsPending) return;
+  state.statsPending = true;
+  try {
+    const res = await fetch("/api/dataset/stats", { cache: "no-store" });
+    if (!res.ok) throw new Error(await readErrorMessage(res));
+    const data = await res.json();
+    renderStats(data);
+    if (state.rowsLoaded) await loadRows();
+    return data;
+  } catch (error) {
+    setText("dataset-stats", `Refresh failed: ${error.message}`);
+    setText("dataset-rows", "Refresh failed. Click LOAD ROWS to retry.");
+    updateLabelSelect({});
     return null;
+  } finally {
+    state.statsPending = false;
   }
-
-  const data = await res.json();
-  renderStats(data);
-  return data;
 }
 
 function updateLabelSelect(byLabel) {
@@ -214,6 +224,7 @@ function updateLabelSelect(byLabel) {
   state.labels = labels;
 
   const previous = select.value;
+  const hadSelection = select.selectedIndex > 0;
   select.innerHTML = "";
 
   const allOpt = document.createElement("option");
@@ -230,15 +241,13 @@ function updateLabelSelect(byLabel) {
     select.appendChild(opt);
   }
 
-  if (previous && [...select.options].some((o) => o.value === previous)) {
-    select.value = previous;
-  } else {
-    select.value = "__all__";
-  }
+  const index = [...select.options].findIndex((o, i) => i > 0 && o.value === previous);
+  select.selectedIndex = hadSelection && index > 0 ? index : 0;
 }
 
 async function refreshModelStatus() {
   const res = await fetch("/api/model/status");
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   const data = await res.json();
   setText("model-loaded", data.model_loaded ? "YES" : "NO");
 }
@@ -246,6 +255,7 @@ async function refreshModelStatus() {
 async function readErrorMessage(res) {
   try {
     const data = await res.json();
+    if (Array.isArray(data.detail)) return data.detail.map((item) => item.msg).join("; ");
     if (data && data.detail) return data.detail;
     return JSON.stringify(data);
   } catch (e) {
@@ -302,6 +312,7 @@ async function saveBuffer() {
     } else {
       await refreshStats();
     }
+    if (state.rowsLoaded) await loadRows();
   } finally {
     setSavePending(false);
   }
@@ -333,7 +344,7 @@ async function retrainModel() {
 
   await refreshModelStatus();
   alert(
-    `Retrained (${data.metrics.model_type}). Accuracy=${data.metrics.accuracy.toFixed(3)} Samples=${data.metrics.samples}`
+    `Retrained (${data.metrics.model_type}). Accuracy=${data.metrics.accuracy.toFixed(3)} Samples=${data.metrics.samples}\n${data.metrics.evaluation_label}\n${data.metrics.warning || "View Model Performance for the full report and confusion matrix."}`
   );
 }
 
@@ -341,7 +352,7 @@ function selectedEditLabel() {
   const sel = document.getElementById("edit-label");
   if (!sel) return null;
   const value = sel.value;
-  if (value === "__all__") return null;
+  if (sel.selectedIndex <= 0) return null;
   return value;
 }
 
@@ -352,13 +363,14 @@ async function loadRows() {
   url.searchParams.set("offset", "0");
   if (label !== null) url.searchParams.set("label", label);
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
     const msg = await readErrorMessage(res);
     alert(msg || "Failed to load rows");
     return;
   }
   const data = await res.json();
+  state.rowsLoaded = true;
   setText("dataset-rows", JSON.stringify(data, null, 2));
 }
 
@@ -390,7 +402,10 @@ async function renameSelectedLabel() {
   const out = await res.json();
   alert(`Renamed: updated ${out.updated} rows`);
   document.getElementById("rename-to").value = "";
-  await refreshStats();
+  renderStats(out.stats);
+  const select = document.getElementById("edit-label");
+  select.selectedIndex = [...select.options].findIndex((option, index) => index > 0 && option.value === toLabel);
+  await loadRows();
 }
 
 async function deleteSelectedLabel() {
@@ -415,7 +430,8 @@ async function deleteSelectedLabel() {
 
   const out = await res.json();
   alert(`Deleted ${out.deleted} rows`);
-  await refreshStats();
+  renderStats(out.stats);
+  await loadRows();
 }
 
 async function deleteEmptyLabels() {
@@ -427,52 +443,53 @@ async function deleteEmptyLabels() {
   }
   const out = await res.json();
   alert(`Deleted ${out.deleted} rows with empty label`);
-  await refreshStats();
+  renderStats(out.stats);
+  await loadRows();
 }
 
 async function clearDataset() {
-  if (!confirm("Clear the entire dataset CSV?")) return;
+  if (!confirm("Clear the entire active dataset (Google Sheets when configured, plus the local CSV)?")) return;
   const res = await fetch("/api/dataset/clear", { method: "POST" });
   if (!res.ok) {
     const msg = await readErrorMessage(res);
     alert(msg || "Clear failed");
     return;
   }
+  const out = await res.json();
   alert("Dataset cleared");
   clearBuffer();
   setText("dataset-rows", "Click LOAD ROWS");
-  await refreshStats();
+  renderStats(out.stats);
+  state.rowsLoaded = false;
 }
 
 function bindUi() {
-  document.getElementById("start").addEventListener("click", startCapture);
-  document.getElementById("stop").addEventListener("click", stopCapture);
-  document.getElementById("save").addEventListener("click", saveBuffer);
-  document.getElementById("clear").addEventListener("click", clearBuffer);
-
-  document
-    .getElementById("refresh-stats")
-    .addEventListener("click", refreshStats);
-
-  document.getElementById("model-reset").addEventListener("click", resetModel);
-
-  document
-    .getElementById("model-retrain")
-    .addEventListener("click", retrainModel);
-
-  document.getElementById("rows-load").addEventListener("click", loadRows);
-  document
-    .getElementById("label-rename")
-    .addEventListener("click", renameSelectedLabel);
-  document
-    .getElementById("label-delete")
-    .addEventListener("click", deleteSelectedLabel);
-  document
-    .getElementById("delete-empty")
-    .addEventListener("click", deleteEmptyLabels);
-  document
-    .getElementById("dataset-clear")
-    .addEventListener("click", clearDataset);
+  const actions = {
+    start: startCapture, stop: stopCapture, save: saveBuffer, clear: clearBuffer,
+    "refresh-stats": refreshStats, "model-reset": resetModel, "model-retrain": retrainModel,
+    "rows-load": loadRows, "label-rename": renameSelectedLabel,
+    "label-delete": deleteSelectedLabel, "delete-empty": deleteEmptyLabels,
+    "dataset-clear": clearDataset,
+  };
+  for (const [id, action] of Object.entries(actions)) {
+    const button = document.getElementById(id);
+    button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const modelAction = id === "model-retrain" || id === "model-reset";
+      const buttons = modelAction ? [document.getElementById("model-reset"), document.getElementById("model-retrain")] : [button];
+      buttons.forEach((item) => { item.disabled = true; });
+      const original = button.textContent;
+      if (id === "model-retrain") button.textContent = "TRAINING...";
+      try {
+        await action();
+      } catch (error) {
+        alert(`Request failed: ${error.message}. Please retry.`);
+      } finally {
+        buttons.forEach((item) => { item.disabled = false; });
+        button.textContent = original;
+      }
+    });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -482,7 +499,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   setSavePending(false);
   setupWebSocket();
   startPolling();
-  await refreshStats();
-  await refreshModelStatus();
-  await pollLatestOnce();
+  await Promise.allSettled([refreshStats(), refreshModelStatus(), pollLatestOnce()]);
 });

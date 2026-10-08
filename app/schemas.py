@@ -141,6 +141,11 @@ class SaveBatchRequest(BaseModel):
             return _normalize_label(value)
 
 
+class DeleteLabelRequest(BaseModel):
+    # An existing empty or whitespace label must be deletable as selected.
+    label: str = Field(..., max_length=64)
+
+
 class RenameLabelRequest(BaseModel):
     from_label: str = Field(..., max_length=64)
     to_label: str = Field(..., min_length=1, max_length=64)

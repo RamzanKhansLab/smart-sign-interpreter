@@ -3,15 +3,17 @@
 import time
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from app.schemas import (
+    DeleteLabelRequest,
     LabelRequest,
     RawSensorData,
     RenameLabelRequest,
     RetrainRequest,
     SaveBatchRequest,
 )
+from app.services.model_metrics import confusion_matrix_png
 
 router = APIRouter()
 
@@ -32,6 +34,32 @@ def interpretation_tool(request: Request):
 def data_collection_tool(request: Request):
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "data_collection.html")
+
+
+@router.get("/performance", response_class=HTMLResponse)
+def model_performance_page(request: Request):
+    return request.app.state.templates.TemplateResponse(request, "performance.html")
+
+
+@router.get("/api/model/metrics")
+def model_metrics(request: Request):
+    return request.app.state.ml_service.performance(request.app.state.dataset_recorder)
+
+
+@router.get("/api/model/confusion-matrix/{run_id}.png")
+def model_confusion_matrix(request: Request, run_id: str):
+    service = request.app.state.ml_service
+    try:
+        metrics = service.get_report(run_id, request.app.state.dataset_recorder)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=confusion_matrix_png(metrics),
+        media_type="image/png",
+        headers={
+            "Content-Disposition": f'inline; filename="confusion-matrix-{run_id}.png"'
+        },
+    )
 
 
 @router.get("/api/health")
@@ -101,20 +129,21 @@ def save_latest_sample(request: Request, payload: LabelRequest):
         recorder.save_sample(pipeline.latest_data, payload.label)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"status": "ok", "saved": 1, "stats": recorder.stats()}
+    return {"status": "ok", "saved": 1, "stats": recorder.stats(refresh=False)}
 
 
 @router.post("/api/dataset/save-batch")
 def save_batch(request: Request, payload: SaveBatchRequest):
     recorder = request.app.state.dataset_recorder
     samples = [
-        (s.model_dump() if hasattr(s, "model_dump") else s.dict()) for s in payload.samples
+        (s.model_dump() if hasattr(s, "model_dump") else s.dict())
+        for s in payload.samples
     ]
     try:
         saved = recorder.save_samples(samples, payload.label)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"status": "ok", "saved": saved, "stats": recorder.stats()}
+    return {"status": "ok", "saved": saved, "stats": recorder.stats(refresh=False)}
 
 
 @router.get("/api/dataset/stats")
@@ -138,28 +167,28 @@ def dataset_rows(
 def dataset_rename_label(request: Request, payload: RenameLabelRequest):
     recorder = request.app.state.dataset_recorder
     updated = recorder.rename_label(payload.from_label, payload.to_label)
-    return {"status": "ok", "updated": updated}
+    return {"status": "ok", "updated": updated, "stats": recorder.stats(refresh=False)}
 
 
 @router.post("/api/dataset/delete-label")
-def dataset_delete_label(request: Request, payload: LabelRequest):
+def dataset_delete_label(request: Request, payload: DeleteLabelRequest):
     recorder = request.app.state.dataset_recorder
     deleted = recorder.delete_label(payload.label)
-    return {"status": "ok", "deleted": deleted}
+    return {"status": "ok", "deleted": deleted, "stats": recorder.stats(refresh=False)}
 
 
 @router.post("/api/dataset/delete-empty-labels")
 def dataset_delete_empty_labels(request: Request):
     recorder = request.app.state.dataset_recorder
     deleted = recorder.delete_empty_labels()
-    return {"status": "ok", "deleted": deleted}
+    return {"status": "ok", "deleted": deleted, "stats": recorder.stats(refresh=False)}
 
 
 @router.post("/api/dataset/clear")
 def dataset_clear(request: Request):
     recorder = request.app.state.dataset_recorder
     recorder.clear()
-    return {"status": "ok"}
+    return {"status": "ok", "stats": recorder.stats(refresh=False)}
 
 
 @router.post("/api/model/reset")
@@ -171,18 +200,16 @@ def reset_model(request: Request):
 
 @router.post("/api/model/retrain")
 def retrain_model(request: Request, payload: RetrainRequest):
-    config = request.app.state.config
     ml_service = request.app.state.ml_service
+    recorder = request.app.state.dataset_recorder
     try:
-        # Try Google Sheets first if configured, otherwise fall back to local CSV
-        if config.GOOGLE_CREDENTIALS_PATH and config.GOOGLE_SPREADSHEET_ID:
-            metrics = ml_service.retrain(
-                model_type=payload.model_type,
-                google_credentials_path=config.GOOGLE_CREDENTIALS_PATH,
-                google_spreadsheet_id=config.GOOGLE_SPREADSHEET_ID,
-            )
-        else:
-            metrics = ml_service.retrain(config.DATASET_PATH, model_type=payload.model_type)
+        metrics = ml_service.retrain(
+            model_type=payload.model_type,
+            rows=recorder.read_rows(),
+            dataset_source=(
+                "google_sheets" if recorder.use_google_sheets else "local_csv"
+            ),
+        )
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "ok", "metrics": metrics}

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -15,6 +16,7 @@ from app.config import get_config
 from app.core.logging import setup_logging
 from app.services.connection_manager import ConnectionManager
 from app.services.dataset_recorder import DatasetRecorder
+from app.services.google_sheets_service import DatasetStorageError
 from app.services.ml_service import MLService
 from app.services.processing import SensorPipeline
 
@@ -22,7 +24,7 @@ from app.services.processing import SensorPipeline
 def create_app() -> FastAPI:
     config = get_config()
 
-    log_file = Path(config.BASE_DIR) / 'logs' / 'app.log'
+    log_file = Path(config.BASE_DIR) / "logs" / "app.log"
     setup_logging(config.LOG_LEVEL, log_file)
 
     ws_manager = ConnectionManager()
@@ -39,20 +41,32 @@ def create_app() -> FastAPI:
         pipeline.set_loop(asyncio.get_running_loop())
         yield
 
-    app = FastAPI(title='Smart Sign Language Glove Backend', lifespan=lifespan)
+    app = FastAPI(title="Smart Sign Language Glove Backend", lifespan=lifespan)
+
+    @app.exception_handler(DatasetStorageError)
+    async def dataset_storage_error(request, exc):
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    @app.middleware("http")
+    async def prevent_stale_dataset_and_metrics(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith(("/api/dataset/", "/api/model/")):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     app.state.config = config
-    app.state.templates = Jinja2Templates(directory='templates')
+    app.state.templates = Jinja2Templates(directory="templates")
 
     if config.CORS_ORIGINS:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=config.CORS_ORIGINS,
             allow_credentials=False,
-            allow_methods=['*'],
-            allow_headers=['*'],
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
 
-    app.mount('/static', StaticFiles(directory='static'), name='static')
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
     app.state.ws_manager = ws_manager
     app.state.dataset_recorder = recorder

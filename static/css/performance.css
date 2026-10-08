@@ -1,0 +1,15 @@
+.performance-page .header { flex-wrap: wrap; gap: 1rem; }
+.performance-page .card { margin-bottom: 1rem; }
+.performance-page .grid .card { margin-bottom: 0; }
+.performance-page #metrics-status,
+.performance-page #matrix-status { margin-top: 0.8rem; }
+.performance-page .table-scroll { overflow-x: auto; margin-top: 1rem; }
+.performance-page table { width: 100%; border-collapse: collapse; }
+.performance-page caption { text-align: left; color: var(--muted); margin-bottom: 0.5rem; }
+.performance-page th,
+.performance-page td { padding: 0.6rem; text-align: left; border-bottom: 1px solid var(--border); }
+.performance-page #confusion-matrix { max-width: 100%; height: auto; margin-top: 1rem; }
+.performance-page button:disabled { opacity: 0.6; cursor: wait; }
+@media (max-width: 600px) {
+  .performance-page .header, .performance-page .panels { padding: 1rem; }
+}

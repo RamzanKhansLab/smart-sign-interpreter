@@ -52,6 +52,7 @@ def retrain_if_needed(
             google_spreadsheet_id=google_spreadsheet_id,
         )
         if hash_path:
+            hash_path.parent.mkdir(parents=True, exist_ok=True)
             hash_path.write_text("google_sheets")
         return True, metrics
     else:
@@ -60,7 +61,7 @@ def retrain_if_needed(
             return False, None
 
         dataset_hash = compute_hash(dataset_path)
-        if not force and hash_path.is_file():
+        if not force and model_path.is_file() and hash_path and hash_path.is_file():
             existing = hash_path.read_text().strip()
             if existing == dataset_hash:
                 return False, None
@@ -73,6 +74,7 @@ def retrain_if_needed(
             random_state=random_state,
         )
         if hash_path:
+            hash_path.parent.mkdir(parents=True, exist_ok=True)
             hash_path.write_text(dataset_hash)
         return True, metrics
 
